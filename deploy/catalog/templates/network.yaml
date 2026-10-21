@@ -1,0 +1,72 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: catalog-private-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: catalog-tls-clients
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: lakekeeper
+      app.kubernetes.io/component: catalog
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: openings-research}
+          podSelector:
+            matchLabels: {openings.generops.dev/role: worker}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: openings-query}
+          podSelector:
+            matchLabels: {app: openings-trino}
+        - podSelector:
+            matchLabels: {openings.generops.dev/role: catalog-bootstrap}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: catalog-databases
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: cnpg.io/cluster, operator: Exists}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: lakekeeper}
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: openfga}
+        - podSelector:
+            matchExpressions:
+              - {key: cnpg.io/cluster, operator: Exists}
+      ports: [{protocol: TCP, port: 5432}]
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: cnpg-system}
+      ports: [{protocol: TCP, port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: catalog-authorization
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: openfga}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: lakekeeper}
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: openfga}
+      ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8081}]

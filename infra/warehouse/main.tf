@@ -18,6 +18,7 @@ variable "subscription_id" { type = string }
 variable "tenant_id" { type = string }
 variable "storage_account_id" { type = string }
 variable "catalog_principal_id" { type = string }
+variable "backup_principal_id" { type = string }
 
 # Run from the private network after foundation is applied. The executing
 # operator needs Storage Blob Data Contributor on this dedicated account.
@@ -33,3 +34,15 @@ resource "azurerm_role_assignment" "catalog_data" {
   principal_id         = var.catalog_principal_id
 }
 output "research_container" { value = azurerm_storage_container.research.name }
+
+resource "azurerm_storage_container" "backups" {
+  name                  = "catalog-backups"
+  storage_account_id    = var.storage_account_id
+  container_access_type = "private"
+  lifecycle { prevent_destroy = true }
+}
+resource "azurerm_role_assignment" "backup_data" {
+  scope                = "${var.storage_account_id}/blobServices/default/containers/${azurerm_storage_container.backups.name}"
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.backup_principal_id
+}

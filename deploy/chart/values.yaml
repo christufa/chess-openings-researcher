@@ -13,3 +13,4 @@ trinoUser: "openings-api"
 trinoTokenAudience: "trino"
 caConfigMap: "internal-ca"
 providerSecret: "openings-provider-keys"
+catalogPrivateCA: false

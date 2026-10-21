@@ -21,8 +21,8 @@ state list` against the remote backend before archiving the local recovery copy.
 Do not overwrite a nonempty remote state or commit local state. Keep the ignored
 backend declaration for subsequent bootstrap operations.
 
-Initialize `foundation`, `warehouse` and `dns` with the same backend settings and
-distinct keys (`foundation.tfstate`, `warehouse.tfstate`, `dns.tfstate`). Apply the
+Initialize `foundation`, `warehouse`, `controllers` and `dns` with the same backend settings and
+distinct keys (`foundation.tfstate`, `warehouse.tfstate`, `controllers.tfstate`, `dns.tfstate`). Apply the
 foundation from reviewed main. Its state private endpoint gives future private
 runners network access without opening the public state firewall to CI ranges.
 The data stack creates the private research container and grants catalog access
@@ -88,7 +88,7 @@ rollback does not roll back Iceberg data or schema; check compatibility first.
 
 ## Reconciliation boundaries
 
-`deploy/gitops` bootstraps two AppProjects and the production root Application
+`deploy/gitops` bootstraps three AppProjects and the production root Application
 after Argo CD is installed. The root reads only `deploy/environments/production`
 on main. The research project permits this repository and research namespace,
 with no cluster-scoped resources. Platform controllers, namespaces, secrets,
@@ -105,7 +105,9 @@ boundaries and signature admission using negative tests as well as successful
 fixture reads. The current chart allows Role/RoleBinding resources; admission
 must prevent binding research principals to broader platform roles.
 
-Controller installation, ephemeral runner provisioning, database backup/restore,
-catalog initialization, private authentication and signature admission remain
-required deployment work. The committed manifests alone do not establish those
-controls or expose a public endpoint.
+The controller Terraform stack and catalog/query charts now describe the private
+platform, including backup configuration and admission rules. Follow
+[the platform runbook](platform.md). Ephemeral runner provisioning, catalog
+initialization/grants, data-service promotion manifests and live recovery and
+admission tests remain required. The committed manifests alone do not establish
+those controls or expose a public endpoint.

@@ -49,7 +49,7 @@ valid origin certificate before enabling public traffic. This stack does not
 change zone-wide TLS settings or unrelated records. If the record already exists,
 import it first rather than overwrite it blindly.
 
-Both stacks require separate keys in a dedicated Azure Blob remote-state backend,
+All stacks require separate keys in a dedicated Azure Blob remote-state backend,
 Entra authentication, blob lease locking and restricted state access. Bootstrap
 that backend before `terraform init`; do not commit state or plan artifacts.
 Example backend arguments are `resource_group_name`, `storage_account_name`,
@@ -90,6 +90,9 @@ The foundation is not a complete live deployment. Before production activation:
 7. Exercise fixture publication, API reads, cancellation, recovery, backup restore
    and rollback before the paid 20-opening collection pass and DNS activation.
 
-The current application Helm chart remains an internal validation runtime.
-The GitOps manifests and publisher do not yet provision the controller, runners,
-gateway, private authentication, signed-image admission or complete data platform.
+The application remains an internal validation runtime. Controller installation,
+internal TLS, image admission, database backups and query authentication now have
+configuration in source; none has been applied to Azure. See
+[the private platform runbook](platform.md) for installation order, secret names,
+quota blockers and the acceptance tests still required. Private runners, catalog
+initialization/grants and the public gateway remain implementation work.

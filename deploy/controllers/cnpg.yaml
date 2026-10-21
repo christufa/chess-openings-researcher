@@ -1,0 +1,4 @@
+replicaCount: 2
+config:
+  data:
+    INHERITED_LABELS: azure.workload.identity/use

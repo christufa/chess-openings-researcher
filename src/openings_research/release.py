@@ -42,7 +42,9 @@ def application(revision: str, api_image: str, worker_image: str, values: dict) 
                 "repoURL": REPOSITORY, "targetRevision": revision, "path": "deploy/chart",
                 "helm": {
                     "releaseName": "openings-research",
-                    "valuesObject": {**values, "apiImage": api_image, "workerImage": worker_image},
+                    "valuesObject": {
+                        **values, "apiImage": api_image, "workerImage": worker_image, "catalogPrivateCA": True,
+                    },
                 },
             },
             "destination": {"server": "https://kubernetes.default.svc", "namespace": "openings-research"},

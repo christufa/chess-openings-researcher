@@ -1,0 +1,9 @@
+apiVersion: v2
+name: openings-catalog
+description: Private PostgreSQL, authorization store and Iceberg catalog
+type: application
+version: 0.1.0
+dependencies:
+  - name: lakekeeper
+    version: 0.12.0
+    repository: https://lakekeeper.github.io/lakekeeper-charts

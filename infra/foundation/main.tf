@@ -129,7 +129,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "research" {
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
   vm_size               = "Standard_D8ds_v5"
   auto_scaling_enabled  = true
-  min_count             = 2
+  min_count             = 3
   max_count             = 8
   zones                 = ["1", "2", "3"]
   vnet_subnet_id        = azurerm_subnet.nodes.id

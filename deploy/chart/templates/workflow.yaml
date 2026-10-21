@@ -5,6 +5,9 @@ metadata:
 spec:
   serviceAccountName: openings-worker
   entrypoint: main
+  podMetadata:
+    labels:
+      openings.generops.dev/role: worker
   parallelism: 1
   activeDeadlineSeconds: 86400
   synchronization:
@@ -22,6 +25,10 @@ spec:
     fsGroup: 185
     seccompProfile: {type: RuntimeDefault}
   volumes:
+    {{- if .Values.catalogPrivateCA }}
+    - name: catalog-ca
+      configMap: {name: {{ .Values.caConfigMap | quote }}}
+    {{- end }}
     - name: scratch
       emptyDir: {}
     - name: catalog-token
@@ -103,6 +110,11 @@ spec:
         envFrom:
           - configMapRef: {name: openings-config}
           - secretRef: {name: {{ .Values.providerSecret | quote }}, optional: true}
+        {{- if .Values.catalogPrivateCA }}
+        env:
+          - name: JAVA_TOOL_OPTIONS
+            value: "-Djavax.net.ssl.trustStore=/var/run/research/catalog-ca/truststore.jks -Djavax.net.ssl.trustStorePassword=changeit"
+        {{- end }}
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
@@ -111,5 +123,8 @@ spec:
           requests: {cpu: "1", memory: 3Gi}
           limits: {cpu: "2", memory: 4Gi}
         volumeMounts:
+          {{- if .Values.catalogPrivateCA }}
+          - {name: catalog-ca, mountPath: /var/run/research/catalog-ca, readOnly: true}
+          {{- end }}
           - {name: scratch, mountPath: /tmp}
           - {name: catalog-token, mountPath: /var/run/research/catalog, readOnly: true}
