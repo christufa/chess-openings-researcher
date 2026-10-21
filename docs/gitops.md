@@ -72,12 +72,12 @@ file containing the real catalog HTTPS URI, Trino host and the runtime settings
 documented in `docs/kubernetes.md`. Then, on a promotion branch, run:
 
 ```powershell
-python -m openings_research.release --revision <full-main-commit-sha> --api-image <registry>/openings-api@sha256:<digest> --worker-image <registry>/openings-worker@sha256:<digest> --values <nonsecret-settings.json>
+python -m openings_research.release --revision <full-main-commit-sha> --api-image <registry>/openings-api@sha256:<digest> --worker-image <registry>/openings-worker@sha256:<digest> --values <nonsecret-settings.json> --platform-values <nonsecret-platform.json>
 ```
 
 The command fetches origin/main, requires the revision to be in its history,
-rejects tags, credentials in catalog URLs and unexpected settings, and writes one
-Application containing the source revision plus both digests. Review those files
+rejects tags, credentials in catalog URLs and unexpected settings, and writes coordinated
+research/catalog/query Applications containing the source revision and image digests. Review those files
 in a PR to main. The generator validates structure and ancestry; it does not
 replace signature verification or prove that the images came from that commit.
 Verify publication artifacts and admission policy before sync.
@@ -107,7 +107,7 @@ must prevent binding research principals to broader platform roles.
 
 The controller Terraform stack and catalog/query charts now describe the private
 platform, including backup configuration and admission rules. Follow
-[the platform runbook](platform.md). Ephemeral runner provisioning, catalog
-initialization/grants, data-service promotion manifests and live recovery and
+[the platform runbook](platform.md). Ephemeral runner provisioning, initial catalog
+creation, effective-grant checks and live recovery and
 admission tests remain required. The committed manifests alone do not establish
 those controls or expose a public endpoint.

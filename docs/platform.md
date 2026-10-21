@@ -39,14 +39,16 @@ has been submitted automatically.
    identity. Neither Argo UI is exposed publicly.
 5. Populate the dedicated Key Vault privately, then prepare immutable main-revision
    Argo Applications for `deploy/catalog` in `openings-catalog` and `deploy/query`
-   in `openings-query`, both in `openings-data`. These promotion manifests are
-   still pending; do not install a mutable branch revision into production.
-   Review them through the production root directory and sync manually.
+   in `openings-query`, both in `openings-data`. The release generator now creates
+   all three applications with `--platform-values`; real main images and applied
+   Azure identifiers are still needed. Review through the production root
+   directory, then manually sync catalog, initialize grants, query and research
+   in that order. A single reviewed release is not an atomic cluster rollout.
 6. Initialize the Lakekeeper warehouse and OpenFGA grants through the dedicated
-   `catalog-bootstrap` service account. That initialization is not implemented
-   yet. Grant the worker scoped warehouse writes and Trino scoped reads; neither
-   runtime principal belongs to instance admins. Verify both allowed and denied
-   operations before publishing a research release.
+   `catalog-bootstrap` service account. Initial server/project/warehouse creation
+   remains operator work. The grant reconciliation command below plans and applies
+   warehouse permissions; neither runtime principal belongs to instance admins.
+   Verify both allowed and denied operations before publishing a research release.
 
 The catalog chart requires `catalogClientId`, `backup.clientId`,
 `backup.destination` (the HTTPS Blob container URL), and `secrets.clientId`,
@@ -118,3 +120,62 @@ The public DNS record and paid 20-opening run remain disabled until these gates
 are met. Runner provisioning requires a dedicated GitHub App registration and
 private credentials; do not store those credentials in source or use a personal
 CLI token as a persistent controller credential.
+
+## Coordinated release inputs
+
+Use `--platform-values <platform.json>` alongside the existing release arguments.
+This file accepts exactly `catalogClientId`, `backupClientId`, `secretsClientId`,
+`tenantId`, `storageAccount`, `vaultName` and `aksIssuer`. Supply actual foundation
+outputs, not example UUIDs. These are nonsecret identifiers. Backup container and
+vault URLs are derived from names; arbitrary Helm overrides and credentials are
+rejected. The query bridge uses the same signed API image as the research API.
+
+Runtime values must use the matching service addresses:
+
+```json
+{
+  "catalogUri": "https://catalog-tls.openings-catalog.svc.cluster.local:8443/catalog",
+  "trinoHost": "trino.openings-query.svc.cluster.local"
+}
+```
+
+All generated Applications use the same immutable main revision and manual sync.
+The generator refuses to drop existing data applications during a research-only
+promotion, or overwrite a customized Kustomization. Inspect the diff, including
+all three resources, before opening the promotion PR.
+
+## Warehouse grant reconciliation
+
+After initial bootstrap/warehouse creation, run the following from the private
+operator context with a short-lived `lakekeeper`-audience token file belonging to
+an authorized catalog bootstrap principal and the internal CA file:
+
+```text
+python -m openings_research.catalog_access --origin https://catalog-tls.openings-catalog.svc.cluster.local:8443 --warehouse-id <warehouse-uuid> --token-file <projected-token-path> --ca-file <ca-path>
+```
+
+The default performs GETs only and prints the proposed changes. Repeat with
+`--apply` to enable managed access, reconcile the direct assignments and verify
+readback. It uses the management/permissions API from Lakekeeper 0.13.3; see the
+[pinned API source](https://github.com/lakekeeper/lakekeeper/blob/v0.13.3/crates/authz-openfga/src/api.rs).
+
+Only these two runtime identities are reconciled:
+
+- `kubernetes~system:serviceaccount:openings-research:openings-worker`: create, modify.
+- `kubernetes~system:serviceaccount:openings-query:trino`: select.
+
+Managed access prevents object ownership from letting workers delegate grants.
+Existing operator/other-user grants are preserved. The command removes excess
+direct warehouse grants for the two managed identities; it does not audit or
+remove inherited project grants, role memberships, or existing child-object
+grants. Those can widen effective access and must be inspected and tested before
+activation. Do not run concurrent permission reconcilers. A failed verification
+leaves the observed state for inspection; it never attempts broad rollback or
+recreates the warehouse. Re-running a converged configuration does not write.
+
+The instance-admin configuration alone does not authorize permission-management
+requests. Initial bootstrap must also establish the operator's OpenFGA rights.
+No credentials or token contents belong in Git, command arguments or reports.
+HTTPS verification is required, redirects are denied, and the token file is read
+again for each request. Unit tests exercise reconciliation and failure handling;
+live authorization and inherited-grant denial tests remain deployment gates.
