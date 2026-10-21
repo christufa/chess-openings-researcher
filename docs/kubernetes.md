@@ -5,6 +5,10 @@ migrate, delete, or read the Databricks data or the Lichess game tables. The
 Databricks bundle remains supported. All research tables live in one namespace,
 `openings_research`, in an explicitly configured Iceberg warehouse.
 
+Databricks deployment is opt-in via the workflow's `deploy_databricks` input.
+The old workspace hostname failed DNS resolution on October 21, 2026; this
+change does not restore it or assert that its existing data is accessible.
+
 ## Architecture
 
 Argo batch → one Spark worker per opening → Tavily → extraction → validation →

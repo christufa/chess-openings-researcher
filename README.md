@@ -217,8 +217,12 @@ for queueing and idempotency behavior.
 
 ## GitHub deployment
 
-PRs and pushes to `main`/`develop` run lint, tests and wheel builds. Successful
-pushes to **`develop`** deploy the dev bundle. Main currently runs checks only.
+PRs and pushes to `main`/`develop` run lint, tests, wheel builds and container checks.
+Databricks deployment is now manual: dispatch **Python CI and optional Databricks
+deploy** on `develop` with `deploy_databricks=true`. Its formerly configured
+workspace hostname did not resolve during the October 21, 2026 migration checks;
+restore/update that workspace configuration before using this option. Kubernetes
+images are currently built and tested, not automatically published or deployed.
 PR jobs cannot access deployment secrets. Actions are pinned to commit SHAs.
 
 Configure the `databricks-dev` GitHub environment, restricted to `develop`, with:
