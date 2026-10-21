@@ -44,7 +44,8 @@ def main():
     truststore = WORK / "ca/truststore.jks"
     if truststore.exists():
         truststore.unlink()
-    run("docker", "run", "--rm", "--user", "0", "-v", f"{WORK / 'ca'}:/certs",
+    owner = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "0"
+    run("docker", "run", "--rm", "--user", owner, "-v", f"{WORK / 'ca'}:/certs",
         "--entrypoint", "keytool", "trinodb/trino:484", "-importcert", "-noprompt",
         "-alias", "test", "-file", "/certs/ca.crt", "-keystore", "/certs/truststore.jks",
         "-storepass", "changeit", "-storetype", "JKS")
