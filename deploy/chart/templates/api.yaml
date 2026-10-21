@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openings-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: openings-api}
+  template:
+    metadata:
+      labels: {app: openings-api}
+    spec:
+      serviceAccountName: openings-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: api
+          image: {{ required "apiImage digest is required" .Values.apiImage | quote }}
+          ports: [{containerPort: 8000, name: http}]
+          envFrom: [{configMapRef: {name: openings-config}}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          livenessProbe: {httpGet: {path: /healthz, port: http}}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            timeoutSeconds: 35
+            periodSeconds: 60
+          volumeMounts:
+            - {name: trino-token, mountPath: /var/run/research/trino, readOnly: true}
+            - {name: ca, mountPath: /var/run/research/ca, readOnly: true}
+      volumes:
+        - name: trino-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.trinoTokenAudience | quote }}
+                  expirationSeconds: 3600
+                  path: token
+        - name: ca
+          configMap: {name: {{ .Values.caConfigMap | quote }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openings-api
+spec:
+  selector: {app: openings-api}
+  ports: [{port: 80, targetPort: http}]
+---
+# No ingress route is installed. Start with an authenticated kubectl port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openings-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []

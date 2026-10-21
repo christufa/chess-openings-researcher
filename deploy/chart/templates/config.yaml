@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openings-config
+data:
+  OPENINGS_CATALOG: {{ .Values.catalog | quote }}
+  OPENINGS_CATALOG_URI: {{ required "catalogUri is required" .Values.catalogUri | quote }}
+  OPENINGS_WAREHOUSE: {{ .Values.warehouse | quote }}
+  OPENINGS_FILE_IO: {{ .Values.fileIO | quote }}
+  OPENINGS_CATALOG_TOKEN_FILE: /var/run/research/catalog/token
+  OPENINGS_READ_NAMESPACE: {{ printf "%s.openings_research" .Values.trinoCatalog | quote }}
+  OPENINGS_TRINO_HOST: {{ required "trinoHost is required" .Values.trinoHost | quote }}
+  OPENINGS_TRINO_PORT: {{ .Values.trinoPort | quote }}
+  OPENINGS_TRINO_USER: {{ .Values.trinoUser | quote }}
+  OPENINGS_TRINO_TOKEN_FILE: /var/run/research/trino/token
+  OPENINGS_TRINO_CA_FILE: /var/run/research/ca/ca.crt
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openings-worker
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openings-api
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openings-workflow-executor
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openings-workflow-executor
+subjects:
+  - kind: ServiceAccount
+    name: openings-worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openings-workflow-executor
