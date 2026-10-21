@@ -1,5 +1,11 @@
 # Openings Researcher
 
+Production direction: a dedicated Azure Kubernetes platform with Iceberg,
+public encyclopedia browsing and private research operations. See the
+[production foundation and remaining deployment work](docs/production.md) and
+[encyclopedia research contract](docs/research-product.md). Infrastructure is
+defined in Terraform; no production cluster has been deployed yet.
+
 **New: Kubernetes/Iceberg runtime and research explorer.** The same pipeline can
 now run in a bounded Argo batch, publish to a dedicated Iceberg warehouse, and
 serve completed research through a read-only API and browser interface. See
@@ -10,7 +16,7 @@ research-specific infrastructure grants. Existing Delta data is not auto-migrate
 A replayable opening-research pipeline deployed to Databricks from GitHub.
 All Delta tables live in **`brikt.openings_research`** (catalog and schema are configurable).
 Agents produce candidates; the pipeline owns source snapshots, chess validation,
-publication, and run history. Games remain in the separate Lichess pipeline.
+publication, and run history. Game ingestion remains outside this application's scope.
 
 ```text
 Tavily or saved sources -> collect -> extract -> validate -> review -> publish
@@ -145,7 +151,7 @@ and a deployment/job identity with schema, volume and table privileges.
    ```
 
 The bundle uploads a versioned wheel under the schema's `artifacts` volume,
-following the neighboring Lichess project. There is no automatic research schedule.
+using a dedicated artifact location. There is no automatic research schedule.
 Deploying creates/updates the job; it does not start paid API research.
 
 ## Run and rerun

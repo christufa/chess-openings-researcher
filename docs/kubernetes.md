@@ -80,7 +80,7 @@ signing/admission must follow the target cluster's policy before deployment.
 Create a local values file with `workerImage`, `apiImage`, `catalogUri`,
 `warehouse`, `catalogTokenAudience`, `trinoHost`, `trinoCatalog`, `trinoUser`,
 `trinoTokenAudience` and `caConfigMap`. Values must describe the new research
-principals/catalog, not a copied Lichess writer identity.
+principals/catalog, with credentials scoped specifically to this application.
 
 ```powershell
 helm lint deploy/chart -f research-values.yaml

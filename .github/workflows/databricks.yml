@@ -31,6 +31,16 @@ jobs:
       - run: python -m ruff check src tests
       - run: python -m pytest -q
       - run: python -m build --wheel
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: '1.16.5'
+      - name: Validate infrastructure without cloud credentials
+        run: |
+          terraform fmt -check -recursive infra
+          for stack in foundation dns; do
+            terraform -chdir="infra/$stack" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="infra/$stack" validate
+          done
 
   deploy:
     name: Deploy Databricks dev

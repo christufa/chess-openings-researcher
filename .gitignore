@@ -37,3 +37,10 @@ build/
 .ruff_cache/
 *.pem
 *.key
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
