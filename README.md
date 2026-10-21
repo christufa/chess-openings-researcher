@@ -1,5 +1,12 @@
 # Openings Researcher
 
+**New: Kubernetes/Iceberg runtime and research explorer.** The same pipeline can
+now run in a bounded Argo batch, publish to a dedicated Iceberg warehouse, and
+serve completed research through a read-only API and browser interface. See
+[Kubernetes setup and migration boundaries](docs/kubernetes.md). This runtime is
+locally tested; connecting it to a real catalog/cluster requires the documented
+research-specific infrastructure grants. Existing Delta data is not auto-migrated.
+
 A replayable opening-research pipeline deployed to Databricks from GitHub.
 All Delta tables live in **`brikt.openings_research`** (catalog and schema are configurable).
 Agents produce candidates; the pipeline owns source snapshots, chess validation,

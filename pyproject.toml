@@ -4,10 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openings-researcher"
-version = "0.3.0"
+version = "0.4.0"
 description = "Replayable chess opening research on Databricks Delta"
 requires-python = ">=3.11"
 dependencies = ["chess==1.11.2", "pydantic>=2.10,<3", "openai==2.32.0", "tavily-python==0.7.23"]
+
+[project.optional-dependencies]
+api = ["fastapi==0.156.4", "uvicorn==0.54.0", "trino==0.340.0"]
+
+[tool.setuptools.package-data]
+openings_research = ["web/*.html", "web/*.css", "web/*.js"]
 
 [project.scripts]
 collect = "openings_research.cli:collect"
