@@ -5,6 +5,8 @@ public encyclopedia browsing and private research operations. See the
 [production foundation and remaining deployment work](docs/production.md) and
 [encyclopedia research contract](docs/research-product.md). Infrastructure is
 defined in Terraform; no production cluster has been deployed yet.
+The [GitOps runbook](docs/gitops.md) covers state bootstrap, signed image
+publication and PR-based promotion of immutable release manifests.
 
 **New: Kubernetes/Iceberg runtime and research explorer.** The same pipeline can
 now run in a bounded Argo batch, publish to a dedicated Iceberg warehouse, and

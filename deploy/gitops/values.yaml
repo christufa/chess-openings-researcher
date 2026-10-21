@@ -1,0 +1,5 @@
+# Install into argocd after its controller is installed and authenticated.
+repository: https://github.com/christufa/openings-researcher.git
+applicationNamespace: openings-research
+# Keep root reconciliation manual until signature admission and data services pass validation.
+automated: false

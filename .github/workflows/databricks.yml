@@ -37,9 +37,10 @@ jobs:
       - name: Validate infrastructure without cloud credentials
         run: |
           terraform fmt -check -recursive infra
-          for stack in foundation dns; do
+          for stack in bootstrap foundation warehouse dns; do
             terraform -chdir="infra/$stack" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="infra/$stack" validate
+            terraform -chdir="infra/$stack" test
           done
 
   deploy:

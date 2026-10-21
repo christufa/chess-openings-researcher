@@ -43,6 +43,19 @@ resource "azurerm_role_assignment" "network" {
   principal_id         = azurerm_user_assigned_identity.cluster.principal_id
 }
 
+resource "azurerm_user_assigned_identity" "kubelet" {
+  name                = "id-${var.name}-kubelet"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  tags                = local.tags
+}
+
+resource "azurerm_role_assignment" "kubelet_operator" {
+  scope                = azurerm_user_assigned_identity.kubelet.id
+  role_definition_name = "Managed Identity Operator"
+  principal_id         = azurerm_user_assigned_identity.cluster.principal_id
+}
+
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "logs-${var.name}"
   resource_group_name = azurerm_resource_group.main.name
@@ -84,6 +97,11 @@ resource "azurerm_kubernetes_cluster" "main" {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.cluster.id]
   }
+  kubelet_identity {
+    client_id                 = azurerm_user_assigned_identity.kubelet.client_id
+    object_id                 = azurerm_user_assigned_identity.kubelet.principal_id
+    user_assigned_identity_id = azurerm_user_assigned_identity.kubelet.id
+  }
   azure_active_directory_role_based_access_control {
     tenant_id          = var.tenant_id
     azure_rbac_enabled = true
@@ -103,7 +121,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     msi_auth_for_monitoring_enabled = true
   }
   key_vault_secrets_provider { secret_rotation_enabled = true }
-  depends_on = [azurerm_role_assignment.network]
+  depends_on = [azurerm_role_assignment.network, azurerm_role_assignment.kubelet_operator]
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "research" {
@@ -138,7 +156,7 @@ resource "azurerm_container_registry" "main" {
 resource "azurerm_role_assignment" "pull" {
   scope                = azurerm_container_registry.main.id
   role_definition_name = "AcrPull"
-  principal_id         = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
+  principal_id         = azurerm_user_assigned_identity.kubelet.principal_id
 }
 
 resource "azurerm_storage_account" "research" {

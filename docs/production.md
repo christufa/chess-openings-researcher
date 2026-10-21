@@ -28,11 +28,19 @@ the result. Do not create duplicate rulesets when updating the existing one.
 
 ## Terraform stacks
 
+See [the GitOps runbook](gitops.md) for bootstrap-state migration, private image
+publication, release preparation and activation prerequisites. `infra/bootstrap`
+now defines the state backend; it has not been applied.
+
 `infra/foundation` owns the new Azure resource group, VNet, private AKS control
 plane, system/research pools, private ACR, ADLS, Key Vault, private DNS/endpoints,
 monitoring and cluster operator role. It does not create database credentials,
 publish secrets or deploy application workloads. Storage and vault destruction
 are guarded. The checked-in example values contain identifiers, not secrets.
+It also defines a production-environment federated publisher identity with
+registry-only AcrPush, a separate catalog workload identity and a private state
+endpoint. `infra/warehouse` creates the research container and its catalog grant from
+the private network.
 
 `infra/dns` owns only the openings A record. Supply `CLOUDFLARE_API_TOKEN` privately
 with Zone DNS Edit scoped to the generops.dev zone. Supply its zone ID and the
@@ -67,19 +75,21 @@ The foundation is not a complete live deployment. Before production activation:
    infrastructure. Test real REST catalog/ADLS/Trino interoperability.
 3. Install Argo CD and Argo Workflows with private Entra-protected administration.
    Restrict the application AppProject to this repo, namespace and resource kinds.
-4. Publish scanned, signed images and provenance from trusted main only. Promote
+4. Provision the private runners and configure the committed publishing workflow
+   to publish scanned, signed images and provenance from trusted main only. Promote
    image digests and an immutable chart/source revision through a PR; Argo CD
    reconciles that reviewed revision. No CI `kubectl apply` or direct protected-main
-   push. Enforce signatures and digests at admission before enabling auto-sync.
+   push. The GitOps bootstrap chart and release generator are committed. Enforce
+   signatures and digests at admission before enabling auto-sync.
 5. Add the public TLS gateway, request limits and origin restrictions. Keep
    research/admin APIs private and authorize the explicit Entra principal. Install
    default-deny egress with deliberate DNS/provider/catalog/storage allowances.
-6. Store provider and Cloudflare tokens in the private secret store; establish
-   rotation and audit logging. Confirm the Cloudflare zone ID and supply the token
-   without placing it in code, tfvars, chat or build output.
+6. Store provider tokens in the private secret store and establish rotation and
+   audit logging. The Cloudflare DNS token has been verified and stored in the
+   protected GitHub production environment along with its zone ID.
 7. Exercise fixture publication, API reads, cancellation, recovery, backup restore
    and rollback before the paid 20-opening collection pass and DNS activation.
 
 The current application Helm chart remains an internal validation runtime.
-It does not yet implement the gateway, identity boundary, GitOps controller,
-signed-image admission or complete data platform above.
+The GitOps manifests and publisher do not yet provision the controller, runners,
+gateway, private authentication, signed-image admission or complete data platform.

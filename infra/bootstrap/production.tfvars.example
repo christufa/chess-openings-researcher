@@ -1,0 +1,5 @@
+subscription_id    = "b1a83802-169e-409d-b62d-751612af6758"
+tenant_id          = "5b6409b8-0e25-4f74-b206-2cc3d80d958b"
+operator_object_id = "ae337b02-4dcd-4e6f-b174-2b33bf02be34"
+state_account_name = "openingsstatechrisprod"
+# Set operator_ipv4 through TF_VAR_operator_ipv4; never allow 0.0.0.0/0.

@@ -57,5 +57,10 @@ jobs:
         run: >-
           helm lint deploy/chart --set workerImage=example/worker:test --set apiImage=example/api:test
           --set catalogUri=http://catalog.invalid/catalog --set trinoHost=trino.invalid
+      - name: Render GitOps bootstrap
+        run: |
+          helm lint deploy/gitops
+          helm template openings-gitops deploy/gitops --namespace argocd > /tmp/openings-gitops.yaml
+          kubectl kustomize deploy/environments/production > /tmp/openings-release.yaml
       - if: always()
         run: docker rm -f openings-api-test openings-trino-test || true
