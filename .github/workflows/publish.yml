@@ -23,7 +23,6 @@ jobs:
     env:
       REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
       COMPONENT: ${{ matrix.component }}
-      DOCKER_CONFIG: ${{ runner.temp }}/docker
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -34,6 +33,8 @@ jobs:
           set -euo pipefail
           [[ "$REGISTRY" =~ ^[a-z0-9]+\.azurecr\.io$ ]]
           [[ "$COMPONENT" == api || "$COMPONENT" == worker ]]
+          install -d -m 700 "$RUNNER_TEMP/docker"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
       - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
         with:
           client-id: ${{ vars.AZURE_PUBLISHER_CLIENT_ID }}
