@@ -1,4 +1,4 @@
-name: Databricks CI and deploy
+name: Python CI and optional Databricks deploy
 
 on:
   pull_request:
@@ -6,6 +6,11 @@ on:
   push:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      deploy_databricks:
+        description: Deploy the legacy Databricks bundle (requires a reachable workspace)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,7 +35,7 @@ jobs:
   deploy:
     name: Deploy Databricks dev
     needs: test
-    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch' && inputs.deploy_databricks
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: databricks-dev
