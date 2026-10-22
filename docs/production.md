@@ -13,9 +13,14 @@ branch. No bypass actors exist. Squash merging is the only enabled merge method.
 Independent approval is intentionally zero for the solo maintainer. Add a trusted
 maintainer before enabling independent approval requirements.
 
-Actions use read-only default tokens, cannot approve PRs, require SHA-pinned
+Actions use read-only default tokens, cannot approve PRs, restrict third-party
+actions to `.github/policies/actions-allowlist.json`, require SHA-pinned
 actions and require approval for all external contributors. Dependabot security
-updates and secret scanning are enabled. Review workflow changes carefully before
+updates, secret scanning, push protection and private vulnerability reporting are enabled.
+CodeQL scans Python and JavaScript; dependency review rejects new high/critical
+vulnerabilities. Dependabot proposes weekly package, Docker, Terraform and Actions
+updates. CODEOWNERS routes review requests without requiring independent approval
+for the solo maintainer. See SECURITY.md for private reporting. Review workflow changes carefully before
 approving any external workflow. PR jobs must never use production runners or
 credentials. Do not use `pull_request_target` to execute contributed code.
 
@@ -96,3 +101,5 @@ configuration in source; none has been applied to Azure. See
 [the private platform runbook](platform.md) for installation order, secret names,
 quota blockers and the acceptance tests still required. Private runners, catalog
 initialization/grants and the public gateway remain implementation work.
+
+Private runner App registration is documented in [the runner setup guide](private-runners.md).
