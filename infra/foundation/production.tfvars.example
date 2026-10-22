@@ -1,0 +1,6 @@
+subscription_id    = "00000000-0000-0000-0000-000000000000"
+tenant_id          = "00000000-0000-0000-0000-000000000000"
+operator_object_id = "00000000-0000-0000-0000-000000000000"
+location           = "eastus2"
+resource_suffix    = "example"
+state_account_id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-openings-prod-state/providers/Microsoft.Storage/storageAccounts/openingsstateexample"

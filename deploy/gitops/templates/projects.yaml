@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: openings-root
+spec:
+  description: Main-branch release manifests; no platform installation permissions
+  sourceRepos: [{{ .Values.repository | quote }}]
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: {{ .Release.Namespace | quote }}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: argoproj.io, kind: Application}
+  orphanedResources: {warn: true}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: openings-research
+spec:
+  description: Research runtime only; platform resources require separate administration
+  sourceRepos: [{{ .Values.repository | quote }}]
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: {{ .Values.applicationNamespace | quote }}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: "", kind: ConfigMap}
+    - {group: "", kind: Service}
+    - {group: "", kind: ServiceAccount}
+    - {group: apps, kind: Deployment}
+    - {group: policy, kind: PodDisruptionBudget}
+    - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: rbac.authorization.k8s.io, kind: Role}
+    - {group: rbac.authorization.k8s.io, kind: RoleBinding}
+    - {group: argoproj.io, kind: WorkflowTemplate}
+    - {group: external-secrets.io, kind: SecretStore}
+    - {group: external-secrets.io, kind: ExternalSecret}
+  orphanedResources: {warn: true}

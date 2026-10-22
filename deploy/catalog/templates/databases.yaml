@@ -1,0 +1,72 @@
+{{- range $name := list "catalog" "authorization" }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $name }}-pg
+  labels:
+    azure.workload.identity/use: "true"
+spec:
+  instances: 3
+  imageName: {{ $.Values.postgresImage | quote }}
+  enableSuperuserAccess: false
+  inheritedMetadata:
+    labels:
+      azure.workload.identity/use: "true"
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        azure.workload.identity/client-id: {{ required "backup.clientId is required" $.Values.backup.clientId | quote }}
+  storage:
+    size: 32Gi
+    storageClass: managed-csi-premium
+  walStorage:
+    size: 16Gi
+    storageClass: managed-csi-premium
+  bootstrap:
+    initdb:
+      database: {{ $name }}
+      owner: {{ $name }}
+      dataChecksums: true
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: topology.kubernetes.io/zone
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "2", memory: 2Gi}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ $name }}-backup
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $name }}-backup
+spec:
+  retentionPolicy: {{ $.Values.backup.retentionPolicy | quote }}
+  configuration:
+    destinationPath: {{ printf "%s/%s" (required "backup.destination is required" $.Values.backup.destination) $name | quote }}
+    azureCredentials:
+      inheritFromAzureAD: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $name }}-daily
+spec:
+  schedule: "0 0 3 * * *"
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: {{ $name }}-pg
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

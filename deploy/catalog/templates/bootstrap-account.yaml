@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: catalog-bootstrap
+automountServiceAccountToken: false
+# This principal is for deliberate operator bootstrap only. No workload or role
+# binding is installed here; workers must receive warehouse permissions instead.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lakekeeper
+  annotations:
+    azure.workload.identity/client-id: {{ required "catalogClientId is required" .Values.catalogClientId | quote }}

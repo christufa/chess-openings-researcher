@@ -1,0 +1,130 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: openings-batch
+spec:
+  serviceAccountName: openings-worker
+  entrypoint: main
+  podMetadata:
+    labels:
+      openings.generops.dev/role: worker
+  parallelism: 1
+  activeDeadlineSeconds: 86400
+  synchronization:
+    mutexes:
+      - name: openings-research-writer
+  arguments:
+    parameters:
+      - name: openings
+        value: '["__smoke_italian__"]'
+      - name: agent
+        value: fixture
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 185
+    fsGroup: 185
+    seccompProfile: {type: RuntimeDefault}
+  volumes:
+    {{- if .Values.catalogPrivateCA }}
+    - name: catalog-ca
+      configMap: {name: {{ .Values.caConfigMap | quote }}}
+    {{- end }}
+    - name: scratch
+      emptyDir: {}
+    - name: catalog-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: {{ .Values.catalogTokenAudience | quote }}
+              expirationSeconds: 7200
+              path: token
+  templates:
+    - name: main
+      steps:
+        - - name: prepare
+            template: prepare
+        - - name: research-batch
+            template: research-batch
+            arguments:
+              parameters:
+                - name: items
+                  value: '{{ "{{steps.prepare.outputs.parameters.items}}" }}'
+    - name: prepare
+      outputs:
+        parameters:
+          - name: items
+            valueFrom: {path: /tmp/items.json}
+      container:
+        image: {{ required "workerImage digest is required" .Values.workerImage | quote }}
+        command: [python3, -c]
+        args:
+          - |
+            import json, sys
+            from pathlib import Path
+            from openings_research.batch import plan
+            names = json.loads(sys.argv[1])
+            batch = plan(names, 0, 'argo')
+            agent = sys.argv[2]
+            if agent not in ('fixture', 'openai'): raise ValueError('Unknown agent')
+            if agent == 'fixture' and names != ['__smoke_italian__']: raise ValueError('Invalid fixture scope')
+            Path('/tmp/items.json').write_text(json.dumps([{'opening':r['opening'],'index':i} for i,r in enumerate(batch['runs'])]))
+          - '{{ "{{workflow.parameters.openings}}" }}'
+          - '{{ "{{workflow.parameters.agent}}" }}'
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: "1", memory: 256Mi}
+        volumeMounts: [{name: scratch, mountPath: /tmp}]
+    - name: research-batch
+      inputs:
+        parameters: [{name: items}]
+      dag:
+        failFast: false
+        tasks:
+          - name: opening
+            template: opening
+            withParam: '{{ "{{inputs.parameters.items}}" }}'
+            arguments:
+              parameters:
+                - {name: opening, value: '{{ "{{item.opening}}" }}'}
+                - {name: index, value: '{{ "{{item.index}}" }}'}
+    - name: opening
+      inputs:
+        parameters: [{name: opening}, {name: index}]
+      activeDeadlineSeconds: 3600
+      retryStrategy:
+        limit: "1"
+        retryPolicy: OnError
+      container:
+        image: {{ .Values.workerImage | quote }}
+        args:
+          - --run-id
+          - '{{ "{{workflow.uid}}" }}-{{ "{{inputs.parameters.index}}" }}'
+          - --opening
+          - '{{ "{{inputs.parameters.opening}}" }}'
+          - --agent
+          - '{{ "{{workflow.parameters.agent}}" }}'
+        envFrom:
+          - configMapRef: {name: openings-config}
+          - secretRef: {name: {{ .Values.providerSecret | quote }}, optional: true}
+        {{- if .Values.catalogPrivateCA }}
+        env:
+          - name: JAVA_TOOL_OPTIONS
+            value: "-Djavax.net.ssl.trustStore=/var/run/research/catalog-ca/truststore.jks -Djavax.net.ssl.trustStorePassword=changeit"
+        {{- end }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        resources:
+          requests: {cpu: "1", memory: 3Gi}
+          limits: {cpu: "2", memory: 4Gi}
+        volumeMounts:
+          {{- if .Values.catalogPrivateCA }}
+          - {name: catalog-ca, mountPath: /var/run/research/catalog-ca, readOnly: true}
+          {{- end }}
+          - {name: scratch, mountPath: /tmp}
+          - {name: catalog-token, mountPath: /var/run/research/catalog, readOnly: true}

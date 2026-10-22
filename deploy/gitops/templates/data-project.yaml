@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: openings-data
+spec:
+  description: Private catalog and query services; cluster grants are owned by bootstrap
+  sourceRepos: [{{ .Values.repository | quote }}]
+  destinations:
+    - {server: "https://kubernetes.default.svc", namespace: openings-catalog}
+    - {server: "https://kubernetes.default.svc", namespace: openings-query}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: "", kind: ConfigMap}
+    - {group: "", kind: Secret}
+    - {group: "", kind: Service}
+    - {group: "", kind: ServiceAccount}
+    - {group: apps, kind: Deployment}
+    - {group: batch, kind: Job}
+    - {group: policy, kind: PodDisruptionBudget}
+    - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: rbac.authorization.k8s.io, kind: Role}
+    - {group: rbac.authorization.k8s.io, kind: RoleBinding}
+    - {group: postgresql.cnpg.io, kind: Cluster}
+    - {group: postgresql.cnpg.io, kind: ScheduledBackup}
+    - {group: barmancloud.cnpg.io, kind: ObjectStore}
+    - {group: external-secrets.io, kind: SecretStore}
+    - {group: external-secrets.io, kind: ExternalSecret}
+    - {group: cert-manager.io, kind: Certificate}
+  orphanedResources: {warn: true}
