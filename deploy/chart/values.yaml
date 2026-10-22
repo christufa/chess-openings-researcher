@@ -14,3 +14,8 @@ trinoTokenAudience: "trino"
 caConfigMap: "internal-ca"
 providerSecret: "openings-provider-keys"
 catalogPrivateCA: false
+secrets:
+  enabled: false
+  clientId: ""
+  tenantId: ""
+  vaultUrl: ""

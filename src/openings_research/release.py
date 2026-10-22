@@ -155,6 +155,9 @@ def main():
         manifests.update(data_applications(
             args.revision, args.api_image, json.loads(args.platform_values.read_text())
         ))
+        runtime["secrets"] = {
+            **manifests["catalog"]["spec"]["source"]["helm"]["valuesObject"]["secrets"], "enabled": True,
+        }
     # Fetch first so an outdated local main cannot be mistaken for approval.
     remote = subprocess.check_output(
         ["git", "remote", "get-url", "origin"], cwd=args.repository, text=True

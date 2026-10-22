@@ -6,25 +6,28 @@ disabled until the acceptance checks below pass.
 
 ## Azure quota gate
 
-On 2026-10-22 the deployment configuration changed to **Ddsv6**, matching the
-requested quota family. Azure reported 0/10 Standard Ddsv6-family vCPUs used and
-14/46 total regional vCPUs used. Both Standard_D4ds_v6 and Standard_D8ds_v6 were
-advertised in zones 1, 2 and 3 but restricted as NotAvailableForSubscription.
-The owner has submitted a quota request and is updating its target. No automated
-quota request or infrastructure apply has been performed.
-
-Recommended target limits remain **128 Ddsv6-family vCPUs** and **160 total
-regional vCPUs**, including availability for those SKUs in zones 1–3. These are
-total limits, not incremental increases. Quota approval does not guarantee zonal
-capacity; check the restrictions again before applying.
+The approved East US 2 quota is now **28 Ddsv6-family vCPUs** and **64 total
+regional vCPUs**. The latest check observed 0 family vCPUs and 14 regional vCPUs
+already used. Standard_D4ds_v6 remains advertised but restricted as
+NotAvailableForSubscription in zones 1, 2 and 3. Recheck after approval propagates;
+if the restriction persists, request availability for that SKU and those zones.
+No additional vCPU quota is required for the reduced configuration below.
 
 The shared `infra/foundation/capacity.json` drives Terraform and the read-only
-preflight command. It configures three D4ds_v6 system nodes and three D8ds_v6
-research nodes at minimum: **36 vCPUs**. Pool maxima consume 84 vCPUs; concurrent
-33% upgrade surge, rounded up separately per pool, brings this to **116 vCPUs**.
-The recommended limits leave room for future private runners and other workloads.
-At the observed existing regional usage, even startup requires a regional limit
-of at least 50. The requested 28-family limit would not fit this deployment.
+preflight command. It now caps system nodes at two D4ds_v6 instances and research
+nodes at three D4ds_v6 instances: **20 vCPUs**. Both pools have equal minimum and
+maximum counts, so no workload-driven node growth is available. Concurrent 33%
+upgrade surge rounds to one extra node per pool, bringing the total to **28**.
+With 14 existing regional vCPUs, the combined surge requirement is 42, below 64.
+
+This replaces the initial, larger 36–116 vCPU plan. The smaller configuration
+accepts reduced system-node redundancy and workload throughput. The research
+pool retains three nodes for database zone separation, with 16 GiB physical RAM
+per node before AKS reservations. Resource requests and topology must be checked
+against actual allocatable capacity after bootstrap; this is not a production
+load-test result. Keep research batches serialized and do not add a dedicated
+runner node pool within the current quota without revisiting this capacity plan.
+The 28-vCPU ceiling has no spare family headroom during simultaneous upgrades.
 
 Run from the repository root after `az login`:
 
@@ -78,7 +81,7 @@ The catalog chart requires `catalogClientId`, `backup.clientId`,
 The issuer comes from the actual AKS output. Keep the default internal catalog
 origin unless deliberately changing service topology.
 
-Key Vault secret names are `catalog-encryption-key` and
+Catalog/query Key Vault secret names are `catalog-encryption-key` and
 `trino-shared-secret-key`. Generate strong random values privately. External
 Secrets materializes each as a `password` key; CreatedOnce avoids an unexpected
 live key change. Rotation requires a coordinated maintenance procedure. Preserve
@@ -200,3 +203,18 @@ No credentials or token contents belong in Git, command arguments or reports.
 HTTPS verification is required, redirects are denied, and the token file is read
 again for each request. Unit tests exercise reconciliation and failure handling;
 live authorization and inherited-grant denial tests remain deployment gates.
+
+## Research provider credentials
+
+Coordinated releases now enable an External Secrets store in openings-research
+using the existing federated secrets identity. Put provider values in the private
+vault under `openai-api-key` and `tavily-api-key`; the generated Kubernetes Secret
+uses `OPENAI_API_KEY` and `TAVILY_API_KEY`. Only research workers receive that
+Secret. The public API has no provider-secret mount or environment reference.
+No token values are rendered into Helm values or release manifests.
+
+Provider secrets refresh hourly. New worker pods receive updated values; existing
+process environments do not change. Confirm ExternalSecret Ready before a paid
+run. Fixture mode can still run without provider keys, and standalone chart
+rendering leaves this integration disabled unless explicitly enabled. The
+namespace SecretStore and ExternalSecret are permitted by the research AppProject.

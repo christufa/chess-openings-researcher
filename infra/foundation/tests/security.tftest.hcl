@@ -21,9 +21,9 @@ run "private_foundation" {
   assert {
     condition = (
       azurerm_kubernetes_cluster.main.default_node_pool[0].vm_size == "Standard_D4ds_v6" &&
-      azurerm_kubernetes_cluster_node_pool.research.vm_size == "Standard_D8ds_v6" &&
-      output.capacity_requirements.startup == 36 &&
-      output.capacity_requirements.maximum_with_surge == 116
+      azurerm_kubernetes_cluster_node_pool.research.vm_size == "Standard_D4ds_v6" &&
+      output.capacity_requirements.startup == 20 &&
+      output.capacity_requirements.maximum_with_surge == 28
     )
     error_message = "The node pools and quota requirements must agree with the approved Ddsv6 sizing."
   }

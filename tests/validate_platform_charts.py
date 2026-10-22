@@ -65,6 +65,14 @@ def main():
         assert project["spec"]["clusterResourceWhitelist"] == []
     render("chart", "openings-research", {"apiImage": "fixture/api:test", "workerImage": "fixture/worker:test",
                                           "catalogUri": "https://catalog.invalid/catalog", "trinoHost": "trino.invalid"})
+    research = render("chart", "openings-research", {
+        **secrets, "secrets.enabled": "true", "apiImage": "fixture/api:test", "workerImage": "fixture/worker:test",
+        "catalogUri": "https://catalog.invalid/catalog", "trinoHost": "trino.invalid"})
+    providers = next(obj for obj in research if obj["kind"] == "ExternalSecret")
+    assert {item["secretKey"] for item in providers["spec"]["data"]} == {"OPENAI_API_KEY", "TAVILY_API_KEY"}
+    api = next(obj for obj in research if obj["kind"] == "Deployment")
+    for container in api["spec"]["template"]["spec"]["containers"]:
+        assert not any("secretRef" in ref for ref in container.get("envFrom", []))
     print("Platform rendering, private services, pod restrictions, backups and access boundaries passed")
 
 

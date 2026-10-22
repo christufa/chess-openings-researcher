@@ -37,7 +37,8 @@ def assess(capacity, usage, skus, region):
         quotas[name] = {"used": used, "limit": limit, "available": max(0, limit - used),
                         "startup_target_limit": used + needed["startup"],
                         "full_target_limit": used + needed["maximum_with_surge"]}
-    for pool in capacity["pools"].values():
+    unique_skus = {pool["vm_size"]: pool for pool in capacity["pools"].values()}
+    for pool in unique_skus.values():
         name = pool["vm_size"]
         matches = [sku for sku in skus if sku["name"] == name]
         if len(matches) != 1:

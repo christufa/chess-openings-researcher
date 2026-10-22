@@ -108,3 +108,27 @@ def test_cli_rejects_mismatched_runtime_before_fetch(tmp_path, monkeypatch):
                                      "--platform-values", str(platform)])
     with pytest.raises(ValueError, match="coordinated private platform"):
         main()
+
+
+def test_coordinated_cli_wires_only_secret_identifiers(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    from openings_research.release import REPOSITORY, main
+    runtime = tmp_path / "runtime.json"
+    platform = tmp_path / "platform.json"
+    runtime.write_text(json.dumps({
+        "catalogUri": "https://catalog-tls.openings-catalog.svc.cluster.local:8443/catalog",
+        "trinoHost": "trino.openings-query.svc.cluster.local",
+    }))
+    platform.write_text(json.dumps(PLATFORM))
+    monkeypatch.setattr(sys, "argv", ["release", "--revision", "c" * 40, "--api-image", API,
+                                     "--worker-image", WORKER, "--values", str(runtime),
+                                     "--platform-values", str(platform), "--repository", str(tmp_path)])
+    monkeypatch.setattr("openings_research.release.subprocess.check_output", lambda *a, **k: REPOSITORY)
+    monkeypatch.setattr("openings_research.release.subprocess.run", lambda *a, **k: None)
+    main()
+    manifest = json.loads((tmp_path / "deploy/environments/production/research.json").read_text())
+    secrets = manifest["spec"]["source"]["helm"]["valuesObject"]["secrets"]
+    assert secrets == {"enabled": True, "clientId": PLATFORM["secretsClientId"],
+                       "tenantId": PLATFORM["tenantId"], "vaultUrl": "https://openings-fixture.vault.azure.net"}
