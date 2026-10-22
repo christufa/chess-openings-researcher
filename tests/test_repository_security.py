@@ -20,8 +20,13 @@ def test_main_requires_real_ci_without_bypass():
     checks = rules["required_status_checks"]
     assert checks["strict_required_status_checks_policy"]
     assert {(check["context"], check["integration_id"]) for check in checks["required_status_checks"]} == {
-        ("Tests and wheel", 15368), ("containers", 15368)
+        ("Tests and wheel", 15368), ("containers", 15368),
+        ("CodeQL (python)", 15368), ("CodeQL (javascript-typescript)", 15368), ("Dependency review", 15368)
     }
+
+    assert rules["code_scanning"]["code_scanning_tools"] == [{
+        "tool": "CodeQL", "alerts_threshold": "errors", "security_alerts_threshold": "high_or_higher"
+    }]
 
 
 def test_public_workflows_are_pinned_and_do_not_execute_privileged_prs():

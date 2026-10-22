@@ -8,8 +8,11 @@ by default. Research keys and cloud administration are not browser capabilities.
 ## Repository controls
 
 The live main ruleset requires PRs, resolved conversations, and successful
-`Tests and wheel` and `containers` checks from GitHub Actions against an up-to-date
-branch. No bypass actors exist. Squash merging is the only enabled merge method.
+`Tests and wheel`, `containers`, `CodeQL (python)`,
+`CodeQL (javascript-typescript)` and `Dependency review` checks from GitHub Actions
+against an up-to-date branch. The CodeQL merge rule additionally blocks high/critical
+security findings and error-level analysis alerts; a successful upload job alone
+is not proof of a clean scan. No bypass actors exist. Squash merging is the only enabled merge method.
 Independent approval is intentionally zero for the solo maintainer. Add a trusted
 maintainer before enabling independent approval requirements.
 
