@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openings-production
+spec:
+  project: openings-root
+  source:
+    repoURL: {{ .Values.repository | quote }}
+    targetRevision: main
+    path: deploy/environments/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Release.Namespace | quote }}
+  syncPolicy:
+    {{- if .Values.automated }}
+    automated:
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    {{- end }}
+    syncOptions: [FailOnSharedResource=true]
+    retry:
+      limit: 3
+      backoff: {duration: 10s, factor: 2, maxDuration: 2m}

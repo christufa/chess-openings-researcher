@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+.venv
+.databricks
+dist
+build
+**/__pycache__
+**/*.egg-info
+data
+test_data
+*.ipynb

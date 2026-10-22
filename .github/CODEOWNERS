@@ -1,0 +1,6 @@
+# Routing only: independent owner approval is not required for a solo maintainer.
+* @christufa
+/.github/ @christufa
+/infra/ @christufa
+/deploy/ @christufa
+/docker/ @christufa

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: openings-namespaces
+description: Workload namespaces required before controller RBAC
+version: 0.1.0

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: openings-platform-base
+description: Private namespaces and certificate authority
+version: 0.1.0
