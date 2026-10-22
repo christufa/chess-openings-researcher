@@ -40,7 +40,7 @@ run "private_foundation" {
     error_message = "Registry must remain private without administrator credentials."
   }
   assert {
-    condition     = azurerm_federated_identity_credential.publisher.subject == "repo:christufa/openings-researcher:environment:production" && azurerm_role_assignment.publish.role_definition_name == "AcrPush"
+    condition     = azurerm_federated_identity_credential.publisher.subject == "repo:christufa/chess-openings-researcher:environment:production" && azurerm_role_assignment.publish.role_definition_name == "AcrPush"
     error_message = "Publisher trust must require the protected production environment and registry-only publishing role."
   }
   assert {

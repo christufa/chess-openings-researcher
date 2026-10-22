@@ -78,7 +78,7 @@ jobs:
           image="$REGISTRY/openings-$COMPONENT@$IMAGE_DIGEST"
           cosign sign --yes "$image"
           cosign verify "$image" \
-            --certificate-identity "https://github.com/christufa/openings-researcher/.github/workflows/publish.yml@refs/heads/main" \
+            --certificate-identity "https://github.com/christufa/chess-openings-researcher/.github/workflows/publish.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" > "$RUNNER_TEMP/verification.json"
           jq -n --arg component "$COMPONENT" --arg image "$image" --arg revision "$GITHUB_SHA" \
             --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \

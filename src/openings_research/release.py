@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
 
-REPOSITORY = "https://github.com/christufa/openings-researcher.git"
+REPOSITORY = "https://github.com/christufa/chess-openings-researcher.git"
 SHA = re.compile(r"[0-9a-f]{40}")
 IMAGE = re.compile(r"([a-z0-9]+\.azurecr\.io)/openings-(api|worker)@sha256:[0-9a-f]{64}")
 ALLOWED_VALUES = {
@@ -163,8 +163,8 @@ def main():
         ["git", "remote", "get-url", "origin"], cwd=args.repository, text=True
     ).strip()
     if remote not in (REPOSITORY, REPOSITORY.removesuffix(".git"),
-                      "git@github.com:christufa/openings-researcher.git"):
-        raise ValueError("Expected the openings-researcher origin")
+                      "git@github.com:christufa/chess-openings-researcher.git"):
+        raise ValueError("Expected the chess-openings-researcher origin")
     subprocess.run(["git", "fetch", "origin", "main"], cwd=args.repository, check=True)
     subprocess.run(
         ["git", "merge-base", "--is-ancestor", args.revision, "origin/main"],

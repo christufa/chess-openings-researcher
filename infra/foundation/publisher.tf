@@ -9,7 +9,7 @@ resource "azurerm_federated_identity_credential" "publisher" {
   user_assigned_identity_id = azurerm_user_assigned_identity.publisher.id
   issuer                    = "https://token.actions.githubusercontent.com"
   audience                  = ["api://AzureADTokenExchange"]
-  subject                   = "repo:christufa/openings-researcher:environment:production"
+  subject                   = "repo:christufa/chess-openings-researcher:environment:production"
 }
 resource "azurerm_role_assignment" "publish" {
   scope                = azurerm_container_registry.main.id

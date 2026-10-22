@@ -44,7 +44,7 @@ spec:
         keyless:
           identities:
             - issuer: https://token.actions.githubusercontent.com
-              subject: https://github.com/christufa/openings-researcher/.github/workflows/publish.yml@refs/heads/main
+              subject: https://github.com/christufa/chess-openings-researcher/.github/workflows/publish.yml@refs/heads/main
         ctlog:
           url: https://rekor.sigstore.dev
   validations:
