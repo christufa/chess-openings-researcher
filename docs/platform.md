@@ -6,19 +6,40 @@ disabled until the acceptance checks below pass.
 
 ## Azure quota gate
 
-On 2026-10-21, East US 2 reported 14/46 total regional vCPUs used and
-0/0 Standard DDSv5-family vCPUs. Both Standard_D4ds_v5 and Standard_D8ds_v5
-reported NotAvailableForSubscription in availability zones 1, 2 and 3.
-Request 128 DDSv5-family vCPUs and 160 total regional vCPUs, with zonal
-availability for those SKUs. These are target limits, not incremental increases.
-Quota approval does not guarantee zonal capacity; verify both again before apply.
+On 2026-10-22 the deployment configuration changed to **Ddsv6**, matching the
+requested quota family. Azure reported 0/10 Standard Ddsv6-family vCPUs used and
+14/46 total regional vCPUs used. Both Standard_D4ds_v6 and Standard_D8ds_v6 were
+advertised in zones 1, 2 and 3 but restricted as NotAvailableForSubscription.
+The owner has submitted a quota request and is updating its target. No automated
+quota request or infrastructure apply has been performed.
 
-The current minimum is three D4ds_v5 system nodes plus three D8ds_v5 research
-nodes: 36 vCPUs. Three research nodes are needed for the databases' required
-zone anti-affinity. Current pool maxima consume 84 vCPUs before upgrade surge;
-33% concurrent surge brings that to 116. The recommendation includes room for
-future private runners and existing subscription workloads. No quota request
-has been submitted automatically.
+Recommended target limits remain **128 Ddsv6-family vCPUs** and **160 total
+regional vCPUs**, including availability for those SKUs in zones 1–3. These are
+total limits, not incremental increases. Quota approval does not guarantee zonal
+capacity; check the restrictions again before applying.
+
+The shared `infra/foundation/capacity.json` drives Terraform and the read-only
+preflight command. It configures three D4ds_v6 system nodes and three D8ds_v6
+research nodes at minimum: **36 vCPUs**. Pool maxima consume 84 vCPUs; concurrent
+33% upgrade surge, rounded up separately per pool, brings this to **116 vCPUs**.
+The recommended limits leave room for future private runners and other workloads.
+At the observed existing regional usage, even startup requires a regional limit
+of at least 50. The requested 28-family limit would not fit this deployment.
+
+Run from the repository root after `az login`:
+
+```powershell
+python -m openings_research.azure_preflight --subscription <subscription-uuid> --region eastus2
+```
+
+The command reads Azure usage and SKU metadata only. It reports separate startup
+and full-capacity readiness, catches missing metadata and subscription/zone
+restrictions, and exits 2 until full capacity is available (0 when ready).
+It checks the additional requirements of **first deployment**, not incremental
+headroom for an already running cluster. It is not a reservation or a complete
+AKS deployment check: actual capacity, supported Kubernetes versions and other
+resource quotas still need plan/apply validation. Terraform also exposes these
+calculated requirements as `capacity_requirements`.
 
 ## Installation order and ownership
 

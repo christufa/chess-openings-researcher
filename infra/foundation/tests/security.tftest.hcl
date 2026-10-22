@@ -19,6 +19,15 @@ variables {
 run "private_foundation" {
   command = plan
   assert {
+    condition = (
+      azurerm_kubernetes_cluster.main.default_node_pool[0].vm_size == "Standard_D4ds_v6" &&
+      azurerm_kubernetes_cluster_node_pool.research.vm_size == "Standard_D8ds_v6" &&
+      output.capacity_requirements.startup == 36 &&
+      output.capacity_requirements.maximum_with_surge == 116
+    )
+    error_message = "The node pools and quota requirements must agree with the approved Ddsv6 sizing."
+  }
+  assert {
     condition     = azurerm_kubernetes_cluster.main.private_cluster_enabled && azurerm_kubernetes_cluster.main.local_account_disabled && !azurerm_kubernetes_cluster.main.run_command_enabled
     error_message = "AKS must use a private control plane and Entra access without local admin or command bypass."
   }

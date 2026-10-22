@@ -1,0 +1,9 @@
+{
+  "family": "StandardDdsv6Family",
+  "zones": ["1", "2", "3"],
+  "surge_percent": 33,
+  "pools": {
+    "system": {"vm_size": "Standard_D4ds_v6", "vcpus": 4, "min_count": 3, "max_count": 5},
+    "research": {"vm_size": "Standard_D8ds_v6", "vcpus": 8, "min_count": 3, "max_count": 8}
+  }
+}

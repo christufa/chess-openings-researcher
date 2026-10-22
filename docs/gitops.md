@@ -6,6 +6,9 @@ deploy it. PR CI has no cloud credentials and runs on GitHub-hosted machines.
 
 ## Bootstrap state and infrastructure
 
+First run the read-only [Azure capacity preflight](platform.md#azure-quota-gate).
+Resolve quota and SKU availability before provisioning.
+
 The first operator runs `infra/bootstrap` with the example identifiers and an
 explicit public IPv4 through `TF_VAR_operator_ipv4`. Review a saved plan before
 applying it. This creates only a dedicated ZRS state account, private container,

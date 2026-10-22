@@ -1,5 +1,6 @@
 locals {
-  tags = { application = "openings-researcher", environment = "production", managed_by = "terraform" }
+  capacity = jsondecode(file("${path.module}/capacity.json"))
+  tags     = { application = "openings-researcher", environment = "production", managed_by = "terraform" }
 }
 
 resource "azurerm_resource_group" "main" {
@@ -83,15 +84,15 @@ resource "azurerm_kubernetes_cluster" "main" {
   tags                      = local.tags
   default_node_pool {
     name                         = "system"
-    vm_size                      = "Standard_D4ds_v5"
+    vm_size                      = local.capacity.pools.system.vm_size
     auto_scaling_enabled         = true
-    min_count                    = 3
-    max_count                    = 5
-    zones                        = ["1", "2", "3"]
+    min_count                    = local.capacity.pools.system.min_count
+    max_count                    = local.capacity.pools.system.max_count
+    zones                        = local.capacity.zones
     vnet_subnet_id               = azurerm_subnet.nodes.id
     only_critical_addons_enabled = true
     temporary_name_for_rotation  = "systemtmp"
-    upgrade_settings { max_surge = "33%" }
+    upgrade_settings { max_surge = "${local.capacity.surge_percent}%" }
   }
   identity {
     type         = "UserAssigned"
@@ -127,13 +128,13 @@ resource "azurerm_kubernetes_cluster" "main" {
 resource "azurerm_kubernetes_cluster_node_pool" "research" {
   name                  = "research"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
-  vm_size               = "Standard_D8ds_v5"
+  vm_size               = local.capacity.pools.research.vm_size
   auto_scaling_enabled  = true
-  min_count             = 3
-  max_count             = 8
-  zones                 = ["1", "2", "3"]
+  min_count             = local.capacity.pools.research.min_count
+  max_count             = local.capacity.pools.research.max_count
+  zones                 = local.capacity.zones
   vnet_subnet_id        = azurerm_subnet.nodes.id
-  upgrade_settings { max_surge = "33%" }
+  upgrade_settings { max_surge = "${local.capacity.surge_percent}%" }
   tags = local.tags
 }
 
