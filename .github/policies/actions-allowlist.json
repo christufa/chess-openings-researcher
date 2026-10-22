@@ -1,0 +1,14 @@
+{
+  "github_owned_allowed": true,
+  "verified_allowed": false,
+  "patterns_allowed": [
+    "azure/login@*",
+    "docker/setup-buildx-action@*",
+    "docker/build-push-action@*",
+    "aquasecurity/trivy-action@*",
+    "aquasecurity/setup-trivy@*",
+    "sigstore/cosign-installer@*",
+    "hashicorp/setup-terraform@*",
+    "databricks/setup-cli@*"
+  ]
+}
