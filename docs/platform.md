@@ -1,8 +1,9 @@
 # Private platform deployment
 
 Status: configured and locally tested, not provisioned. No DNS activation or
-production research run has occurred. Keep the draft PR open and automatic sync
-disabled until the acceptance checks below pass.
+production research run has occurred. Source configuration may merge after the
+required CI and security checks pass. Keep automatic sync and public activation
+disabled until the deployment acceptance checks below pass.
 
 ## Azure quota gate
 
