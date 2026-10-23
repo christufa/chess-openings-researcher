@@ -67,6 +67,12 @@ def assess(capacity, usage, skus, region):
             "startup_capacity_ready": startup, "full_capacity_ready": full}
 
 
+def default_capacity():
+    """infra/capacity.json of this checkout, wherever the command is run from."""
+    checkout = Path(__file__).resolve().parents[2] / "infra" / "capacity.json"
+    return checkout if checkout.exists() else Path("infra/capacity.json")
+
+
 def azure(*args):
     executable = shutil.which("az")
     if not executable:
@@ -82,7 +88,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subscription", required=True)
     parser.add_argument("--region", default="eastus2")
-    parser.add_argument("--capacity", type=Path, default=Path("infra/capacity.json"))
+    parser.add_argument("--capacity", type=Path, default=default_capacity())
     args = parser.parse_args()
     args.subscription = str(UUID(args.subscription))
     if not re.fullmatch(r"[a-z0-9]+", args.region):
