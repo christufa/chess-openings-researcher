@@ -101,6 +101,11 @@ uses GitHub's immutable subject format (`owner@<owner-id>/<repo>@<repo-id>`), so
 `gh api repos/<owner>/<repo>/actions/oidc/customization/sub` reports, without `repo:`.
 The images workflow prints the subject it presents if sign-in fails.
 
+[christufa/chess-engines](https://github.com/christufa/chess-engines) publishes its image to
+the same registry with the same CI identity (a second federated credential, main only).
+Set `github_oidc_engines_repository` the same way, and give that repository the same three
+secrets.
+
 ## Recovery
 
 - Research data: ZRS, 30-day soft delete, a delete lock and `prevent_destroy`.

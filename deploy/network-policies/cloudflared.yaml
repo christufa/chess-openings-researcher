@@ -3,6 +3,7 @@
 #   openings-research  openings-api :8000   (public explorer)
 #   argocd             argocd-server :8080  (behind Access)
 #   argo               workflows server :2746 (behind Access)
+#   chess-engines      chess-engines :8000  (Access service tokens; policy in that chart)
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

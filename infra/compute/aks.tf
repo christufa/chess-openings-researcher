@@ -52,6 +52,12 @@ resource "azurerm_kubernetes_cluster" "main" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+  # KEDA (managed add-on): scales the shared chess-engines API on its request load
+  # (christufa/chess-engines, chart/chess-engines: a metrics-api ScaledObject).
+  workload_autoscaler_profile {
+    keda_enabled = true
+  }
+
   # kubectl through Entra ID and Azure RBAC only.
   local_account_disabled            = true
   role_based_access_control_enabled = true

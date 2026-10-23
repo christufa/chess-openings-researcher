@@ -13,6 +13,7 @@ facts**: annotations on Argo CD's in-cluster cluster Secret, written by
 | `platform-base/` | ValidatingAdmissionPolicy: research pods run only digest-pinned `openings-*` images from the cluster registry, plus the pinned Argo executor |
 | `chart/` | The research runtime: `openings-batch` and `catalog-bootstrap` WorkflowTemplates, the explorer API, provider keys, log archiving |
 | `network-policies/` | Cilium default-deny ingress per namespace; ingress and egress limits for `openings-research` |
+| `apps/chess-engines.yaml` | The shared chess-engines API from [christufa/chess-engines](https://github.com/christufa/chess-engines) (its chart, its own AppProject limited to the `chess-engines` namespace) |
 
 ## Sync order
 
@@ -22,7 +23,7 @@ facts**: annotations on Argo CD's in-cluster cluster Secret, written by
 | 1 | `barman-cloud` (needs cert-manager and CNPG), `admission` |
 | 2 | `catalog` (database, secrets, service account) |
 | 3 | `lakekeeper` |
-| 4 | `research`, which exists only after the images workflow has written `openings.yaml` to the `deploy-state` branch |
+| 4 | `research`, which exists only after the images workflow has written `openings.yaml` to the `deploy-state` branch; `chess-engines`, likewise from chess-engines' `deploy-state` |
 | 5 | `network-policies` |
 
 ## Rolling out new builds
@@ -48,8 +49,10 @@ The only way in is an outbound Cloudflare Tunnel (`deploy/cloudflared`, routes i
 | `chess-openings.generops.dev` | Research explorer and read-only API | Public; the API rate-limits per client IP (`CF-Connecting-IP`) |
 | `chess-openings-cd.generops.dev` | Argo CD | Cloudflare Access, Microsoft sign-in, owner only |
 | `chess-openings-flows.generops.dev` | Argo Workflows | Cloudflare Access, Microsoft sign-in, owner only |
+| `chess-engines.generops.dev` | The shared chess-engines API, for other projects | Cloudflare Access service tokens only (`CF-Access-Client-Id` and `CF-Access-Client-Secret` headers); copies in Key Vault as `chess-engines-<name>-client-id` and `-client-secret` |
 
-Network policies let cloudflared reach only those three Services. Port-forward still
+Network policies let cloudflared reach only those four Services. In the cluster, research
+pods call `http://chess-engines.chess-engines.svc.cluster.local` directly. Port-forward still
 works and needs your Entra sign-in and an authorized IP:
 
 ```powershell
