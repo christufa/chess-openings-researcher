@@ -20,6 +20,12 @@ spec:
         value: '["__smoke_italian__"]'
       - name: agent
         value: fixture
+      # reextract: skip collection and extract again from the sources a previous run saved
+      # (no new web searches); needs exactly one opening and that run's ID.
+      - name: mode
+        value: refresh
+      - name: source-run-id
+        value: ""
   securityContext:
     runAsNonRoot: true
     runAsUser: 185
@@ -64,9 +70,16 @@ spec:
             agent = sys.argv[2]
             if agent not in ('fixture', 'openai'): raise ValueError('Unknown agent')
             if agent == 'fixture' and names != ['__smoke_italian__']: raise ValueError('Invalid fixture scope')
+            mode, source = sys.argv[3], sys.argv[4]
+            if mode not in ('refresh', 'reextract'): raise ValueError('Unknown mode')
+            if mode == 'reextract' and (not source or len(names) != 1 or agent != 'openai'):
+                raise ValueError('reextract needs one opening, agent=openai and a source-run-id')
+            if mode == 'refresh' and source: raise ValueError('source-run-id is only used with mode=reextract')
             Path('/tmp/items.json').write_text(json.dumps([{'opening':r['opening'],'index':i} for i,r in enumerate(batch['runs'])]))
           - '{{ "{{workflow.parameters.openings}}" }}'
           - '{{ "{{workflow.parameters.agent}}" }}'
+          - '{{ "{{workflow.parameters.mode}}" }}'
+          - '{{ "{{workflow.parameters.source-run-id}}" }}'
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
@@ -106,6 +119,10 @@ spec:
           - '{{ "{{inputs.parameters.opening}}" }}'
           - --agent
           - '{{ "{{workflow.parameters.agent}}" }}'
+          - --mode
+          - '{{ "{{workflow.parameters.mode}}" }}'
+          - --source-run-id
+          - '{{ "{{workflow.parameters.source-run-id}}" }}'
         envFrom:
           - configMapRef: {name: openings-config}
           - secretRef: {name: {{ .Values.providerSecret | quote }}, optional: true}
