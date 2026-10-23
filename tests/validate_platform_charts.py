@@ -60,6 +60,8 @@ def check_gitops(platform):
     # cert-manager injects caBundle into its webhooks; Argo CD must ignore it, not undo it.
     certs = next(obj for obj in apps if obj["metadata"]["name"] == "cert-manager")["spec"]
     assert {d["kind"] for d in certs["ignoreDifferences"]} == {"ValidatingWebhookConfiguration", "MutatingWebhookConfiguration"}
+    for rule in certs["ignoreDifferences"]:  # AKS appends these two selector entries to webhooks
+        assert any("kubernetes.azure.com/managedby" in e and "control-plane" in e for e in rule["jqPathExpressions"])
     assert "RespectIgnoreDifferences=true" in certs["syncPolicy"]["syncOptions"]
 
     # The admission policy and the Argo Workflows chart must pin the same executor digest.
