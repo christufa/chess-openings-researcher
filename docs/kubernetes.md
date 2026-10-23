@@ -74,6 +74,14 @@ For the major-opening batch after the fixture succeeds:
 argo submit --namespace openings-research --from workflowtemplate/openings-batch -p agent=openai -p "openings=$(Get-Content batches/major-openings-20.json -Raw)"
 ```
 
+To extract again from the sources a previous run already saved (no new web searches;
+the model is called again), pass that run's ID. Its `research_runs.run_id` is
+`<workflow uid>-<index>`:
+
+```powershell
+argo submit --namespace openings-research --from workflowtemplate/openings-batch -p agent=openai -p 'openings=["Italian Game"]' -p mode=reextract -p source-run-id=<run-id>
+```
+
 Use the Argo UI/history for failures. Infrastructure retries reuse the same run
 ID; changed code/prompts require a new workflow. There is no scheduled research.
 Do not garbage-collect source versions referenced by historical evidence. Iceberg

@@ -51,6 +51,65 @@ def test_accepted_claim_needs_category_and_line_must_not_have_one():
         validate_reviews(ReviewOutput(reviews=[decision()]), [candidate(kind="line")])
 
 
+def response_with(output):
+    return httpx.Response(
+        200,
+        json={
+            "id": "resp_review",
+            "created_at": 0,
+            "model": "gpt-5.4-mini",
+            "object": "response",
+            "status": "completed",
+            "output": [
+                {
+                    "id": "msg_review",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": json.dumps(output), "annotations": []}],
+                }
+            ],
+            "usage": {"input_tokens": 50, "output_tokens": 20, "total_tokens": 70},
+        },
+    )
+
+
+def run_review(handler, candidates):
+    reviewer = OpenAIReviewer("test-key", "gpt-5.4-mini")
+    reviewer.client.close()
+    with OpenAI(api_key="test-key", http_client=httpx.Client(transport=httpx.MockTransport(handler))) as client:
+        reviewer.client = client
+        return reviewer.review("Italian Game", candidates, {"s": "fixture://s"})
+
+
+def test_schema_requires_a_category_on_claims_and_forbids_one_on_lines():
+    seen = {}
+
+    def handler(request):
+        seen["schema"] = json.loads(request.content)["text"]["format"]["schema"]
+        return response_with({
+            "claim_reviews": [{"candidate_id": "c0001", "decision": "reject", "category": "plan",
+                               "rationale": "Not supported by the cited passage."}],
+            "line_reviews": [{"candidate_id": "c0002", "decision": "accept",
+                              "rationale": "The source gives the full sequence."}],
+        })
+
+    result = run_review(handler, [candidate("claim-id"), candidate("line-id", kind="line")])
+    defs = seen["schema"]["$defs"]
+    claim = next(d for name, d in defs.items() if name.startswith("ConstrainedClaimReview"))
+    line = next(d for name, d in defs.items() if name.startswith("ConstrainedLineReview"))
+    assert "category" in claim["required"] and "null" not in json.dumps(claim["properties"]["category"])
+    assert "category" not in line["properties"]
+    def allowed(prop):  # one-value Literal renders as const, several as enum
+        return prop.get("enum", [prop.get("const")])
+
+    assert allowed(claim["properties"]["candidate_id"]) == ["c0001"]
+    assert allowed(line["properties"]["candidate_id"]) == ["c0002"]
+    by_id = {r.candidate_id: r for r in result.output.reviews}
+    assert by_id["claim-id"].category == "plan" and by_id["line-id"].category is None
+    validate_reviews(result.output, [candidate("claim-id"), candidate("line-id", kind="line")])
+
+
 def test_openai_review_preserves_wire_output_and_restores_candidate_ids():
     def handler(request):
         body = json.loads(request.content)
@@ -58,7 +117,7 @@ def test_openai_review_preserves_wire_output_and_restores_candidate_ids():
         assert context["candidates"][0]["candidate_id"] == "c0001"
         assert context["candidates"][0]["candidate"]["category"] == "pawn_break"
         assert "piece sacrifice is not a pawn break" in body["input"][0]["content"]
-        output = ReviewOutput(reviews=[decision("c0001")]).model_dump_json()
+        output = json.dumps({"claim_reviews": [decision("c0001").model_dump()]})
         return httpx.Response(
             200,
             json={
