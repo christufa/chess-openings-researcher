@@ -158,6 +158,18 @@ class ResearchReader:
                 return rows
             offset += page
 
+    def evaluations(self, position_id, engine="stockfish"):
+        """Engine evaluations for one position; none until the evaluation job has run."""
+        try:
+            return self.db.query(
+                f"""SELECT move_uci, move_san, score_cp, mate, depth, rank, engine, engine_version
+                FROM {self.table("move_evaluations")} WHERE position_id = ? AND engine = ?
+                ORDER BY depth DESC, rank LIMIT 100""",
+                (position_id, engine),
+            )
+        except StoreUnavailable:
+            return []  # e.g. the table doesn't exist yet: serve the book without evaluations
+
     def runs(self, opening_id, limit=50):
         return self.db.query(
             f"""SELECT run_id, opening_id, opening, status, created_at, completed_at

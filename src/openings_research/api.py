@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .serving import IcebergReader, ResearchReader, StoreUnavailable
-from .tree import START, BookTree
+from .tree import START, BookTree, rank_moves
 
 PageSize = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0, le=10000)]
@@ -137,7 +137,8 @@ def create_app(reader=None, limiter=None):
         if key not in books:
             books.clear()
             books[key] = BookTree(lines)
-        return books[key].lookup(fen)
+        position = books[key].lookup(fen)
+        return rank_moves(position, reader.evaluations(position["position_id"]))
 
     @app.get("/api/v1/compare")
     def compare(before: RunID, after: RunID):
