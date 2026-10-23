@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .serving import IcebergReader, ResearchReader, StoreUnavailable
+from .tree import START, BookTree, rank_moves
 
 PageSize = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0, le=10000)]
@@ -125,6 +126,19 @@ def create_app(reader=None, limiter=None):
     @app.get("/api/v1/runs/{run_id}/coverage")
     def coverage(run_id: str):
         return {"report": reader.coverage(run_id)}
+
+    books = {}  # one tree per published-lines snapshot; rebuilt only when lines change
+
+    @app.get("/api/v1/tree")
+    def tree(fen: Annotated[str, Query(min_length=10, max_length=100)] = START["normalized_fen"]):
+        """Book moves from a position: every researched line through it, merged across openings."""
+        lines = reader.book_lines()
+        key = hash(tuple((r["opening"], r["name"], r["start_fen"], tuple(r["moves_uci"])) for r in lines))
+        if key not in books:
+            books.clear()
+            books[key] = BookTree(lines)
+        position = books[key].lookup(fen)
+        return rank_moves(position, reader.evaluations(position["position_id"]))
 
     @app.get("/api/v1/compare")
     def compare(before: RunID, after: RunID):
