@@ -119,6 +119,11 @@ def main():
     assert [t["audience"] for t in tokens] == ["lakekeeper"]  # catalog only; no other credential
     config = next(obj for obj in research if obj["metadata"]["name"] == "openings-config")
     assert config["data"]["OPENINGS_AZURE_OPENAI_ENDPOINT"] == "https://oai-fixture.openai.azure.com/"
+    batch = next(obj for obj in research if obj["metadata"]["name"] == "openings-batch")
+    params = {p["name"]: p["value"] for p in batch["spec"]["arguments"]["parameters"]}
+    assert params["mode"] == "refresh" and params["source-run-id"] == ""  # paid collection only when asked
+    opening = next(t for t in batch["spec"]["templates"] if t["name"] == "opening")
+    assert {"--mode", "--source-run-id"} <= set(opening["container"]["args"])
     names = {obj["metadata"]["name"] for obj in research}
     assert {"openings-batch", "catalog-bootstrap", "artifact-repositories"} <= names
     worker = next(obj for obj in research if obj["kind"] == "ServiceAccount" and obj["metadata"]["name"] == "openings-worker")
