@@ -98,9 +98,9 @@ def check_gitops(platform):
     assert [d["namespace"] for d in engines["destinations"]] == ["chess-engines"]
     assert engines["sourceRepos"] == ["https://github.com/christufa/chess-engines.git"]
     engines_app = next(obj for obj in apps if obj["kind"] == "ApplicationSet" and obj["metadata"]["name"] == "chess-engines")
-    allowed_from = engines_app["spec"]["template"]["spec"]["source"]["helm"]["valuesObject"]["networkPolicy"]["allowFrom"]
+    engine_values = yaml.safe_load(engines_app["spec"]["template"]["spec"]["source"]["helm"]["values"])
+    allowed_from = engine_values["networkPolicy"]["allowFrom"]
     assert {a["namespace"] for a in allowed_from} == {"openings-research", "argo", "cloudflared"}
-    engine_values = engines_app["spec"]["template"]["spec"]["source"]["helm"]["valuesObject"]
     assert engine_values["nodeSelector"] == {"workload": None, "kubernetes.azure.com/agentpool": "system"}
     assert engine_values["tolerations"] == [] and engine_values["autoscaling"]["maxReplicas"] == 1
     binding = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
