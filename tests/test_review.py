@@ -82,32 +82,49 @@ def run_review(handler, candidates):
         return reviewer.review("Italian Game", candidates, {"s": "fixture://s"})
 
 
-def test_schema_requires_a_category_on_claims_and_forbids_one_on_lines():
+def test_schema_keys_every_candidate_and_types_categories_by_kind():
     seen = {}
 
     def handler(request):
         seen["schema"] = json.loads(request.content)["text"]["format"]["schema"]
         return response_with({
-            "claim_reviews": [{"candidate_id": "c0001", "decision": "reject", "category": "plan",
-                               "rationale": "Not supported by the cited passage."}],
-            "line_reviews": [{"candidate_id": "c0002", "decision": "accept",
-                              "rationale": "The source gives the full sequence."}],
+            "claims": {
+                "c0001": {"decision": "reject", "category": "plan", "rationale": "Not supported by the passage."},
+                "c0002": {"decision": "accept", "category": "tactic", "rationale": "The passage shows the trick."},
+            },
+            "lines": {"c0003": {"decision": "accept", "rationale": "The source gives the full sequence."}},
         })
 
-    result = run_review(handler, [candidate("claim-id"), candidate("line-id", kind="line")])
-    defs = seen["schema"]["$defs"]
-    claim = next(d for name, d in defs.items() if name.startswith("ConstrainedClaimReview"))
-    line = next(d for name, d in defs.items() if name.startswith("ConstrainedLineReview"))
+    candidates = [candidate("claim-a"), candidate("claim-b"), candidate("line-c", kind="line")]
+    result = run_review(handler, candidates)
+    schema = seen["schema"]
+    defs = schema["$defs"]
+
+    def resolve(node):
+        return defs[node["$ref"].split("/")[-1]] if "$ref" in node else node
+
+    claims, lines = resolve(schema["properties"]["claims"]), resolve(schema["properties"]["lines"])
+    # Exactly one decision per candidate: every alias is a required key and no others are allowed.
+    assert sorted(claims["required"]) == sorted(claims["properties"]) == ["c0001", "c0002"]
+    assert lines["required"] == list(lines["properties"]) == ["c0003"]
+    assert claims["additionalProperties"] is False and lines["additionalProperties"] is False
+    claim, line = resolve(claims["properties"]["c0001"]), resolve(lines["properties"]["c0003"])
     assert "category" in claim["required"] and "null" not in json.dumps(claim["properties"]["category"])
     assert "category" not in line["properties"]
-    def allowed(prop):  # one-value Literal renders as const, several as enum
-        return prop.get("enum", [prop.get("const")])
-
-    assert allowed(claim["properties"]["candidate_id"]) == ["c0001"]
-    assert allowed(line["properties"]["candidate_id"]) == ["c0002"]
     by_id = {r.candidate_id: r for r in result.output.reviews}
-    assert by_id["claim-id"].category == "plan" and by_id["line-id"].category is None
-    validate_reviews(result.output, [candidate("claim-id"), candidate("line-id", kind="line")])
+    assert by_id["claim-a"].category == "plan" and by_id["line-c"].category is None
+    validate_reviews(result.output, candidates)
+
+
+def test_a_batch_without_lines_omits_the_lines_object():
+    seen = {}
+
+    def handler(request):
+        seen["schema"] = json.loads(request.content)["text"]["format"]["schema"]
+        return response_with({"claims": {"c0001": decision("c0001").model_dump(exclude={"candidate_id"})}})
+
+    run_review(handler, [candidate("only-claim")])
+    assert list(seen["schema"]["properties"]) == ["claims"]
 
 
 def test_openai_review_preserves_wire_output_and_restores_candidate_ids():
@@ -117,7 +134,7 @@ def test_openai_review_preserves_wire_output_and_restores_candidate_ids():
         assert context["candidates"][0]["candidate_id"] == "c0001"
         assert context["candidates"][0]["candidate"]["category"] == "pawn_break"
         assert "piece sacrifice is not a pawn break" in body["input"][0]["content"]
-        output = json.dumps({"claim_reviews": [decision("c0001").model_dump()]})
+        output = json.dumps({"claims": {"c0001": decision("c0001").model_dump(exclude={"candidate_id"})}})
         return httpx.Response(
             200,
             json={
