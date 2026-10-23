@@ -47,6 +47,30 @@ jobs:
           done
           curl --fail http://127.0.0.1:8000/api/openapi.json > /dev/null
           curl --fail http://127.0.0.1:8000/ > /dev/null
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: openings-worker:test
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-worker.json
+          exit-code: "0"
+          trivyignores: .trivyignore
+      - name: Fail on fixable critical vulnerabilities in the worker image
+        run: python .github/scripts/trivy_report.py trivy-worker.json openings-worker
+      - name: Scan api image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: openings-api:test
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-api.json
+          exit-code: "0"
+          trivyignores: .trivyignore
+      - name: Fail on fixable critical vulnerabilities in the api image
+        run: python .github/scripts/trivy_report.py trivy-api.json openings-api
       - name: Render deployment chart
         run: >-
           helm lint deploy/chart --set workerImage=example/worker:test --set apiImage=example/api:test

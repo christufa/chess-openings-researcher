@@ -1,0 +1,7 @@
+# Vulnerabilities accepted after review: one ID per line, with a reason and a recheck date, e.g.
+# CVE-2099-0001  # in a jar Spark ships, not reachable from the research worker; recheck 2027-01-01
+
+# Netty SNI routing bypass (netty-handler 4.2.7, bundled with Spark 4.1.3). Only affects
+# servers that route TLS by SNI; Spark's RPC doesn't use SniHandler and the worker runs no
+# TLS server on Netty. Drop when Spark ships Netty >= 4.2.17. Recheck 2027-01-31.
+CVE-2026-75595
