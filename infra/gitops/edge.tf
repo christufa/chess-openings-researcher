@@ -10,9 +10,10 @@
 # Public hostname (<prefix>): the research explorer and its read-only API, rate-limited per
 # client IP by the API itself (CF-Connecting-IP).
 #
-# Machine hostname (chess-engines.<domain>): the shared engine API (christufa/chess-engines)
-# for projects outside this cluster. Cloudflare Access admits only its service tokens (no
-# sign-in page: anything else gets a 401), and cloudflared re-checks the Access token.
+# chess-engines.<domain>: the shared engine API (christufa/chess-engines) for projects
+# outside this cluster, and its playground UI at /. Cloudflare Access admits its service
+# tokens (programs) and the owner after a Microsoft sign-in (the playground); a program
+# without a token gets a 401, not a sign-in page. cloudflared re-checks the Access token.
 # https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
 locals {
   private_hosts = {
@@ -97,10 +98,14 @@ resource "cloudflare_zero_trust_access_application" "chess_engines" {
   domain                    = local.engines_hostname
   destinations              = [{ type = "public", uri = local.engines_hostname }]
   session_duration          = "24h"
-  allowed_idps              = [var.access_identity_provider_id] # unused: no identity policy
-  app_launcher_visible      = false
-  service_auth_401_redirect = true # an API: 401 for missing tokens, not a login redirect
-  policies                  = [{ id = cloudflare_zero_trust_access_policy.chess_engines.id, precedence = 1 }]
+  allowed_idps              = [var.access_identity_provider_id]
+  auto_redirect_to_identity = true # browsers go straight to the Microsoft sign-in
+  app_launcher_visible      = true
+  service_auth_401_redirect = true # programs: 401 for a missing or bad token, not a login redirect
+  policies = [
+    { id = cloudflare_zero_trust_access_policy.chess_engines.id, precedence = 1 }, # service tokens
+    { id = cloudflare_zero_trust_access_policy.owner.id, precedence = 2 },         # the playground
+  ]
 }
 
 # Copies for callers in other clusters (External Secrets, CI secrets). Writing needs your
