@@ -1,3 +1,6 @@
+# One small catalog database, backed up to its own blob container with Barman.
+# Authorization is network policy (templates/network.yaml), not OpenFGA: only the
+# research worker and API namespaces can reach the catalog.
 backup:
   destination: ""
   clientId: ""
@@ -11,60 +14,23 @@ secrets:
 lakekeeper:
   helmWait: true
   catalog:
-    replicas: 2
+    replicas: 1
     podLabels:
       azure.workload.identity/use: "true"
+    nodeSelector:
+      kubernetes.azure.com/agentpool: system
     config:
       LAKEKEEPER__ENABLE_AZURE_SYSTEM_CREDENTIALS: "true"
       LAKEKEEPER__KUBERNETES_AUTHENTICATION_SUBJECT_SOURCE: username
-      LAKEKEEPER__INSTANCE_ADMINS: '["kubernetes~system:serviceaccount:openings-catalog:catalog-bootstrap"]'
     resources:
-      requests: {cpu: 250m, memory: 256Mi}
-      limits: {cpu: "2", memory: 1Gi}
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 512Mi}
     podSecurityContext:
       runAsNonRoot: true
-      fsGroup: 10001
       seccompProfile: {type: RuntimeDefault}
     containerSecurityContext:
       allowPrivilegeEscalation: false
       capabilities: {drop: [ALL]}
-    extraVolumes:
-      - name: catalog-tls
-        secret: {secretName: catalog-tls}
-      - name: tls-proxy-config
-        configMap: {name: catalog-tls-proxy}
-      - name: tls-proxy-tmp
-        emptyDir: {sizeLimit: 64Mi}
-    extraContainers:
-      - name: tls-proxy
-        image: nginxinc/nginx-unprivileged@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
-        command: [sh, -ec]
-        args:
-          - |
-            nginx -g 'daemon off;' &
-            nginx_pid=$!
-            trap 'kill "$nginx_pid"; exit 0' TERM INT
-            while kill -0 "$nginx_pid" 2>/dev/null; do
-              sleep 60 & wait $!
-              nginx -s reload
-            done
-            wait "$nginx_pid"
-        ports: [{name: catalog-https, containerPort: 8443}]
-        securityContext:
-          runAsUser: 101
-          runAsNonRoot: true
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities: {drop: [ALL]}
-        resources:
-          requests: {cpu: 25m, memory: 32Mi}
-          limits: {cpu: 250m, memory: 128Mi}
-        readinessProbe:
-          httpGet: {path: /healthz, port: catalog-https, scheme: HTTPS}
-        volumeMounts:
-          - {name: catalog-tls, mountPath: /etc/catalog-tls, readOnly: true}
-          - {name: tls-proxy-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true}
-          - {name: tls-proxy-tmp, mountPath: /tmp}
   serviceAccount:
     create: false
     name: lakekeeper
@@ -91,24 +57,7 @@ lakekeeper:
       enabled: true
       audience: lakekeeper
       legacyEnabled: false
-      createClusterRoleBinding: false
+      createClusterRoleBinding: true # system:auth-delegator for TokenReview
   authz:
-    backend: openfga
-  internalOpenFGA: true
-  openfga:
-    replicaCount: 2
-    podSecurityContext:
-      runAsNonRoot: true
-      seccompProfile: {type: RuntimeDefault}
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities: {drop: [ALL]}
-    datastore:
-      engine: postgres
-      migrationType: initContainer
-      uriSecret: authorization-pg-app
-    postgresql:
-      enabled: false
-    resources:
-      requests: {cpu: 100m, memory: 128Mi}
-      limits: {cpu: "1", memory: 512Mi}
+    backend: allowall
+  internalOpenFGA: false

@@ -12,22 +12,24 @@ from uuid import UUID
 
 
 def requirements(capacity):
-    pools = capacity["pools"].values()
-    return {
-        "startup": sum(pool["min_count"] * pool["vcpus"] for pool in pools),
-        "maximum": sum(pool["max_count"] * pool["vcpus"] for pool in pools),
-        "maximum_with_surge": sum(
-            (pool["max_count"] + math.ceil(pool["max_count"] * capacity["surge_percent"] / 100))
-            * pool["vcpus"] for pool in pools
-        ),
-    }
+    """vCPUs needed per quota: each pool's own quota, plus regional cores for on-demand pools."""
+    needed = {}
+    for pool in capacity["pools"].values():
+        surge = math.ceil(pool["max_count"] * capacity["surge_percent"] / 100)
+        names = [pool["quota"]] + ([] if pool["spot"] else ["cores"])
+        for name in names:
+            row = needed.setdefault(name, {"startup": 0, "maximum": 0, "maximum_with_surge": 0})
+            row["startup"] += pool["min_count"] * pool["vcpus"]
+            row["maximum"] += pool["max_count"] * pool["vcpus"]
+            row["maximum_with_surge"] += (pool["max_count"] + surge) * pool["vcpus"]
+    return needed
 
 
 def assess(capacity, usage, skus, region):
     needed = requirements(capacity)
     issues = []
     quotas = {}
-    for name in (capacity["family"], "cores"):
+    for name, need in needed.items():
         matches = [row for row in usage if row["name"]["value"].lower() == name.lower()]
         if len(matches) != 1:
             issues.append(f"Missing or ambiguous quota: {name}")
@@ -35,37 +37,31 @@ def assess(capacity, usage, skus, region):
         row = matches[0]
         used, limit = int(row["currentValue"]), int(row["limit"])
         quotas[name] = {"used": used, "limit": limit, "available": max(0, limit - used),
-                        "startup_target_limit": used + needed["startup"],
-                        "full_target_limit": used + needed["maximum_with_surge"]}
-    unique_skus = {pool["vm_size"]: pool for pool in capacity["pools"].values()}
-    for pool in unique_skus.values():
+                        "startup_target_limit": used + need["startup"],
+                        "full_target_limit": used + need["maximum_with_surge"]}
+    for pool in capacity["pools"].values():
         name = pool["vm_size"]
         matches = [sku for sku in skus if sku["name"] == name]
         if len(matches) != 1:
             issues.append(f"Missing or ambiguous SKU: {name}")
             continue
         sku = matches[0]
-        locations = [item for item in sku.get("locationInfo", []) if item["location"].lower() == region.lower()]
-        zones = set().union(*(set(item.get("zones", [])) for item in locations))
-        missing = set(capacity["zones"]) - zones
-        if missing:
-            issues.append(f"{name}: zones not advertised: {', '.join(sorted(missing))}")
-        if sku.get("family", "").lower() != capacity["family"].lower():
+        if not any(item["location"].lower() == region.lower() for item in sku.get("locationInfo", [])):
+            issues.append(f"{name}: not offered in {region}")
+        if not pool["spot"] and sku.get("family", "").lower() != pool["quota"].lower():
             issues.append(f"{name}: unexpected or missing quota family")
         cpus = next((item["value"] for item in sku.get("capabilities", []) if item["name"] == "vCPUs"), None)
         if cpus is None or int(cpus) != pool["vcpus"]:
             issues.append(f"{name}: vCPU count differs from capacity configuration")
+        # Pools are regional (no zones), so only whole-region restrictions block them.
         for restriction in sku.get("restrictions", []):
             info = restriction.get("restrictionInfo", {})
             regions = info.get("locations", restriction.get("values", []))
-            if regions and region.lower() not in [value.lower() for value in regions]:
-                continue
-            kind = restriction.get("type")
-            restricted_zones = set(info.get("zones", []))
-            if kind != "Zone" or not restricted_zones or restricted_zones.intersection(capacity["zones"]):
-                issues.append(f"{name}: {kind} restriction: {restriction.get('reasonCode', 'unknown')}")
-    startup = not issues and len(quotas) == 2 and all(q["available"] >= needed["startup"] for q in quotas.values())
-    full = not issues and len(quotas) == 2 and all(q["available"] >= needed["maximum_with_surge"] for q in quotas.values())
+            if restriction.get("type") == "Location" and region.lower() in [value.lower() for value in regions]:
+                issues.append(f"{name}: Location restriction: {restriction.get('reasonCode', 'unknown')}")
+    complete = not issues and len(quotas) == len(needed)
+    startup = complete and all(quotas[n]["available"] >= needed[n]["startup"] for n in needed)
+    full = complete and all(quotas[n]["available"] >= needed[n]["maximum_with_surge"] for n in needed)
     return {"region": region, "scope": "additional capacity for first deployment",
             "requirements": needed, "quotas": quotas, "sku_issues": issues,
             "startup_capacity_ready": startup, "full_capacity_ready": full}
@@ -86,7 +82,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subscription", required=True)
     parser.add_argument("--region", default="eastus2")
-    parser.add_argument("--capacity", type=Path, default=Path("infra/foundation/capacity.json"))
+    parser.add_argument("--capacity", type=Path, default=Path("infra/capacity.json"))
     args = parser.parse_args()
     args.subscription = str(UUID(args.subscription))
     if not re.fullmatch(r"[a-z0-9]+", args.region):

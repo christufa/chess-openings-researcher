@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored). Never commit real identifiers or addresses.
+subscription_id    = "00000000-0000-0000-0000-000000000000" # az account show --query id -o tsv
+tenant_id          = "00000000-0000-0000-0000-000000000000" # az account show --query tenantId -o tsv
+operator_object_id = "00000000-0000-0000-0000-000000000000" # az ad signed-in-user show --query id -o tsv
+state_account_name = "<globally unique, 3-24 lowercase letters/digits>"
+budget_start_date  = "2026-11-01T00:00:00Z"
+budget_emails      = ["<you>@example.com"]
+# Set operator_ipv4 through TF_VAR_operator_ipv4; never allow 0.0.0.0/0.

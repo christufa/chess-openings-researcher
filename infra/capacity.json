@@ -1,0 +1,21 @@
+{
+  "surge_percent": 10,
+  "pools": {
+    "system": {
+      "vm_size": "Standard_D4as_v5",
+      "vcpus": 4,
+      "quota": "standardDASv5Family",
+      "spot": false,
+      "min_count": 1,
+      "max_count": 2
+    },
+    "batch": {
+      "vm_size": "Standard_D4as_v5",
+      "vcpus": 4,
+      "quota": "lowPriorityCores",
+      "spot": true,
+      "min_count": 0,
+      "max_count": 1
+    }
+  }
+}

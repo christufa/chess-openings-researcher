@@ -5,6 +5,8 @@ variables {
   operator_object_id = "00000000-0000-0000-0000-000000000003"
   state_account_name = "openingsteststate"
   operator_ipv4      = "203.0.113.7"
+  budget_start_date  = "2026-11-01T00:00:00Z"
+  budget_emails      = ["owner@example.com"]
 }
 run "restricted_state" {
   command = plan

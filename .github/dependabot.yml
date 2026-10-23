@@ -18,10 +18,9 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /infra/bootstrap
-      - /infra/foundation
-      - /infra/warehouse
-      - /infra/controllers
-      - /infra/dns
+      - /infra/platform
+      - /infra/compute
+      - /infra/gitops
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
