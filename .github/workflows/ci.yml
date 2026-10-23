@@ -2,7 +2,8 @@ name: Python and infrastructure CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    # lean-private-platform**: stacked PRs for the platform rework get checks too.
+    branches: [main, develop, 'lean-private-platform**']
   push:
     branches: [main, develop]
   workflow_dispatch:
