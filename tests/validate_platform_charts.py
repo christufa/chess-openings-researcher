@@ -85,6 +85,9 @@ def main():
     assert len(databases) == 1
     assert databases[0]["spec"]["plugins"][0]["isWALArchiver"] is True
     assert any(obj["kind"] == "ScheduledBackup" for obj in catalog)
+    review = next(obj for obj in catalog if obj["kind"] == "ClusterRoleBinding")
+    assert review["roleRef"]["name"] == "system:auth-delegator"  # Lakekeeper verifies tokens
+    assert review["subjects"] == [{"kind": "ServiceAccount", "name": "lakekeeper", "namespace": "openings-catalog"}]
     policy = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
     assert policy["spec"]["validationActions"] == ["Deny"]
 
