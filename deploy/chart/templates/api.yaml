@@ -8,7 +8,9 @@ spec:
     matchLabels: {app: openings-api}
   template:
     metadata:
-      labels: {app: openings-api}
+      labels:
+        app: openings-api
+        openings.generops.dev/role: api # the catalog only admits worker and API pods
     spec:
       serviceAccountName: openings-api
       securityContext:
@@ -33,9 +35,12 @@ spec:
             httpGet: {path: /readyz, port: http}
             timeoutSeconds: 35
             periodSeconds: 60
+          {{- if .Values.trinoHost }}
           volumeMounts:
             - {name: trino-token, mountPath: /var/run/research/trino, readOnly: true}
             - {name: ca, mountPath: /var/run/research/ca, readOnly: true}
+          {{- end }}
+      {{- if .Values.trinoHost }}
       volumes:
         - name: trino-token
           projected:
@@ -46,6 +51,7 @@ spec:
                   path: token
         - name: ca
           configMap: {name: {{ .Values.caConfigMap | quote }}}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

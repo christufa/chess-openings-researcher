@@ -1,6 +1,0 @@
-dependencies:
-- name: lakekeeper
-  repository: https://lakekeeper.github.io/lakekeeper-charts
-  version: 0.12.0
-digest: sha256:985da5e33c542f2743156282e525c267b22f4264a9c524995f38aa167da7afaa
-generated: "2026-10-21T03:34:23.9664199-04:00"

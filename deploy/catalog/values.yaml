@@ -1,6 +1,6 @@
 # One small catalog database, backed up to its own blob container with Barman.
 # Authorization is network policy (templates/network.yaml), not OpenFGA: only the
-# research worker and API namespaces can reach the catalog.
+# research worker and API can reach the catalog.
 backup:
   destination: ""
   clientId: ""
@@ -11,53 +11,3 @@ secrets:
   clientId: ""
   tenantId: ""
   vaultUrl: ""
-lakekeeper:
-  helmWait: true
-  catalog:
-    replicas: 1
-    podLabels:
-      azure.workload.identity/use: "true"
-    nodeSelector:
-      kubernetes.azure.com/agentpool: system
-    config:
-      LAKEKEEPER__ENABLE_AZURE_SYSTEM_CREDENTIALS: "true"
-      LAKEKEEPER__KUBERNETES_AUTHENTICATION_SUBJECT_SOURCE: username
-    resources:
-      requests: {cpu: 50m, memory: 128Mi}
-      limits: {memory: 512Mi}
-    podSecurityContext:
-      runAsNonRoot: true
-      seccompProfile: {type: RuntimeDefault}
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-      capabilities: {drop: [ALL]}
-  serviceAccount:
-    create: false
-    name: lakekeeper
-    annotations: {}
-  postgresql:
-    enabled: false
-  externalDatabase:
-    type: postgres
-    host_read: catalog-pg-rw
-    host_write: catalog-pg-rw
-    port: 5432
-    database: catalog
-    userSecret: catalog-pg-app
-    userSecretKey: username
-    passwordSecret: catalog-pg-app
-    passwordSecretKey: password
-  secretBackend:
-    type: Postgres
-    postgres:
-      encryptionKeySecret: catalog-encryption
-      encryptionKeySecretKey: password
-  auth:
-    k8s:
-      enabled: true
-      audience: lakekeeper
-      legacyEnabled: false
-      createClusterRoleBinding: true # system:auth-delegator for TokenReview
-  authz:
-    backend: allowall
-  internalOpenFGA: false

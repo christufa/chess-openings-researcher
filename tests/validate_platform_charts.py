@@ -1,5 +1,6 @@
-"""Render platform charts and reject deployment-boundary regressions without a cluster."""
+"""Render platform charts and GitOps manifests and reject boundary regressions without a cluster."""
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -16,20 +17,13 @@ def render(chart, namespace, values=None):
     return [item for item in yaml.safe_load_all(result.stdout) if item]
 
 
-def main():
-    cache = ROOT / ".cache/platform-helm"
-    cache.mkdir(parents=True, exist_ok=True)
-    repo_args = ["--repository-config", str(cache / "repositories.yaml"), "--repository-cache", str(cache)]
-    subprocess.run(["helm", "repo", "add", "lakekeeper", "https://lakekeeper.github.io/lakekeeper-charts",
-                    *repo_args], check=True)
-    subprocess.run(["helm", "dependency", "build", str(ROOT / "deploy/catalog"), *repo_args], check=True)
-    secrets = {"secrets.clientId": "fixture", "secrets.tenantId": "fixture",
-               "secrets.vaultUrl": "https://fixture.vault.azure.net"}
-    catalog = render("catalog", "openings-catalog", {
-        **secrets, "catalogClientId": "fixture", "backup.clientId": "fixture",
-        "backup.destination": "https://fixture.blob.core.windows.net/catalog-backups"})
-    platform = render("platform-base", "argocd", {"registry": "fixture.azurecr.io"})
-    for obj in catalog:
+def load(directory):
+    return [item for path in sorted((ROOT / directory).glob("*.yaml"))
+            for item in yaml.safe_load_all(path.read_text()) if item]
+
+
+def check_pods(objects):
+    for obj in objects:
         if obj["kind"] == "Service":
             assert obj["spec"].get("type", "ClusterIP") == "ClusterIP", obj["metadata"]["name"]
         if obj["kind"] == "Deployment":
@@ -39,23 +33,83 @@ def main():
                 security = container["securityContext"]
                 assert security["allowPrivilegeEscalation"] is False
                 assert "ALL" in security["capabilities"]["drop"]
+
+
+def check_gitops(platform):
+    apps = load("deploy/apps")
+    projects = {obj["metadata"]["name"]: obj for obj in apps if obj["kind"] == "AppProject"}
+    for obj in apps:
+        if obj["kind"] == "AppProject":
+            continue
+        spec = obj["spec"]["template"]["spec"] if obj["kind"] == "ApplicationSet" else obj["spec"]
+        project = projects[spec["project"]]
+        source = spec["source"]
+        assert source["repoURL"] in project["spec"]["sourceRepos"], obj["metadata"]["name"]
+        if "chart" in source:  # upstream charts pinned to an exact version
+            assert re.fullmatch(r"v?\d+\.\d+\.\d+", source["targetRevision"]), obj["metadata"]["name"]
+        else:
+            assert source["targetRevision"] == "main", obj["metadata"]["name"]
+        namespace = spec["destination"]["namespace"]
+        allowed = {d["namespace"] for d in project["spec"]["destinations"]}
+        assert namespace in allowed, (obj["metadata"]["name"], namespace)
+    assert projects["platform-security"]["spec"]["clusterResourceWhitelist"] == []
+    rendered = yaml.safe_dump(apps)
+    for forbidden in ("ingress", "LoadBalancer", "cloudflared"):
+        assert forbidden not in rendered, f"nothing may be published: found {forbidden}"
+
+    # The admission policy and the Argo Workflows chart must pin the same executor digest.
+    workflows = next(obj for obj in apps if obj["metadata"]["name"] == "argo-workflows")
+    executor = workflows["spec"]["source"]["helm"]["valuesObject"]["executor"]["image"]["tag"]
+    policy = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicy")
+    assert f"quay.io/argoproj/argoexec:{executor}" in yaml.safe_dump(policy), "executor digest drift"
+
+    secured = {d["namespace"] for d in projects["platform-security"]["spec"]["destinations"]}
+    policies = load("deploy/network-policies")
+    covered = {obj["metadata"]["namespace"] for obj in policies}
+    assert covered <= secured
+    assert secured - covered == {"openings-catalog"}  # its policies ship with the catalog chart
+    egress = next(obj for obj in policies if obj["metadata"]["name"] == "limited-egress")
+    world = [rule for rule in egress["spec"]["egress"] if "world" in rule.get("toEntities", [])]
+    assert [p["port"] for rule in world for ports in rule["toPorts"] for p in ports["ports"]] == ["443"]
+
+
+def main():
+    secrets = {"secrets.clientId": "fixture", "secrets.tenantId": "fixture",
+               "secrets.vaultUrl": "https://fixture.vault.azure.net"}
+    catalog = render("catalog", "openings-catalog", {
+        **secrets, "catalogClientId": "fixture", "backup.clientId": "fixture",
+        "backup.destination": "https://fixture.blob.core.windows.net/catalog-backups"})
+    platform = render("platform-base", "openings-research", {"registry": "fixture.azurecr.io"})
+    check_pods(catalog)
     databases = [obj for obj in catalog if obj["kind"] == "Cluster"]
     assert len(databases) == 1
     assert databases[0]["spec"]["plugins"][0]["isWALArchiver"] is True
     assert any(obj["kind"] == "ScheduledBackup" for obj in catalog)
     policy = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
     assert policy["spec"]["validationActions"] == ["Deny"]
-    render("chart", "openings-research", {"apiImage": "fixture/api:test", "workerImage": "fixture/worker:test",
-                                          "catalogUri": "https://catalog.invalid/catalog", "trinoHost": "trino.invalid"})
+
+    images = {"apiImage": "fixture.azurecr.io/openings-api@sha256:" + "a" * 64,
+              "workerImage": "fixture.azurecr.io/openings-worker@sha256:" + "b" * 64,
+              "catalogUri": "http://lakekeeper.openings-catalog.svc.cluster.local:8181/catalog"}
+    minimal = render("chart", "openings-research", images)
+    assert not any(obj["metadata"]["name"] == "catalog-bootstrap" for obj in minimal)
     research = render("chart", "openings-research", {
-        **secrets, "secrets.enabled": "true", "apiImage": "fixture/api:test", "workerImage": "fixture/worker:test",
-        "catalogUri": "https://catalog.invalid/catalog", "trinoHost": "trino.invalid"})
+        **secrets, **images, "secrets.enabled": "true", "storageAccount": "fixture",
+        "workflowLogs.clientId": "fixture"})
+    check_pods(research)
     providers = next(obj for obj in research if obj["kind"] == "ExternalSecret")
     assert {item["secretKey"] for item in providers["spec"]["data"]} == {"OPENAI_API_KEY", "TAVILY_API_KEY"}
     api = next(obj for obj in research if obj["kind"] == "Deployment")
+    assert api["spec"]["template"]["metadata"]["labels"]["openings.generops.dev/role"] == "api"
     for container in api["spec"]["template"]["spec"]["containers"]:
         assert not any("secretRef" in ref for ref in container.get("envFrom", []))
-    print("Platform rendering, private services, pod restrictions and catalog backups passed")
+    names = {obj["metadata"]["name"] for obj in research}
+    assert {"openings-batch", "catalog-bootstrap", "artifact-repositories"} <= names
+    worker = next(obj for obj in research if obj["kind"] == "ServiceAccount" and obj["metadata"]["name"] == "openings-worker")
+    assert worker["metadata"]["annotations"]["azure.workload.identity/client-id"] == "fixture"
+
+    check_gitops(platform)
+    print("Charts, GitOps apps, admission, network policies and catalog backups passed")
 
 
 if __name__ == "__main__":

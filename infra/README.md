@@ -65,8 +65,8 @@ Then, from `infra/`, with your `az login` session:
    `terraform -chdir=bootstrap output backend`.
 3. `platform`, then `compute`, then `gitops`, each with
    `terraform init "-backend-config=../state.tfbackend"`, a saved plan and its apply.
-   `gitops` needs `kubelogin` (`az aks install-cli`) and the `deploy/apps`
-   directory on `main`.
+   `gitops` needs `kubelogin` (`az aks install-cli`); Argo CD then syncs `deploy/apps`
+   (see [deploy/README.md](../deploy/README.md) for the sync order and first bring-up).
 4. Put `openai-api-key`, `tavily-api-key` and `catalog-encryption-key` in the Key
    Vault (your IP added first). Keep a copy of the encryption key outside Azure:
    without it, a restored catalog database cannot decrypt its stored settings.

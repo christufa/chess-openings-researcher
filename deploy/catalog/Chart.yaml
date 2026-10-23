@@ -1,9 +1,5 @@
 apiVersion: v2
 name: openings-catalog
-description: Iceberg REST catalog (Lakekeeper) and its backed-up PostgreSQL database
+description: The catalog's database (CloudNativePG + Barman), secrets, service account and network policies; Lakekeeper itself is deploy/apps/lakekeeper.yaml
 type: application
-version: 0.1.0
-dependencies:
-  - name: lakekeeper
-    version: 0.12.0
-    repository: https://lakekeeper.github.io/lakekeeper-charts
+version: 0.2.0

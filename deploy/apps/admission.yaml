@@ -1,0 +1,40 @@
+# Image admission for the research namespace (deploy/platform-base): only digest-pinned
+# openings-api/openings-worker images from this cluster's registry, plus the pinned Argo
+# executor. A built-in ValidatingAdmissionPolicy, so no admission controller to run.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: admission
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            openings.generops.dev/facts: "true"
+  template:
+    metadata:
+      name: admission
+      annotations:
+        argocd.argoproj.io/sync-wave: "1" # before any research pod exists
+    spec:
+      project: openings
+      source:
+        repoURL: https://github.com/christufa/chess-openings-researcher.git
+        targetRevision: main
+        path: deploy/platform-base
+        helm:
+          valuesObject:
+            registry: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}'
+      destination:
+        server: '{{ .server }}'
+        namespace: openings-research
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }

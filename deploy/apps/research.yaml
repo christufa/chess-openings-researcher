@@ -1,0 +1,76 @@
+# The research runtime (deploy/chart): the openings-batch and catalog-bootstrap
+# WorkflowTemplates, the read-only explorer API and the provider-key ExternalSecret.
+#
+# Images: openings-worker and openings-api from the cluster's registry, built and signed by
+# the images workflow, which commits their digests to the deploy-state branch
+# (openings.yaml). The git generator below reads that file, so a new build is a manifest
+# change Argo CD syncs. Until the first build lands the generator yields nothing, and this
+# Application does not exist yet.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: research
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  openings.generops.dev/facts: "true"
+          - git: # worker.digest, api.digest and commit of the newest signed main build
+              repoURL: https://github.com/christufa/chess-openings-researcher.git
+              revision: deploy-state
+              files:
+                - path: openings.yaml
+  # If the file ever went missing, keep the Application (and its workloads).
+  syncPolicy:
+    applicationsSync: create-update
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: research
+      annotations:
+        argocd.argoproj.io/sync-wave: "4" # after the catalog is up
+    spec:
+      project: openings
+      source:
+        repoURL: https://github.com/christufa/chess-openings-researcher.git
+        targetRevision: main
+        path: deploy/chart
+        helm:
+          valuesObject:
+            workerImage: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}/openings-worker@{{ .worker.digest }}'
+            apiImage: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}/openings-api@{{ .api.digest }}'
+            catalogUri: http://lakekeeper.openings-catalog.svc.cluster.local:8181/catalog
+            storageAccount: '{{ index .metadata.annotations "openings.generops.dev/storage-account" }}'
+            researchContainer: '{{ index .metadata.annotations "openings.generops.dev/research-container" }}'
+            workflowLogs:
+              container: '{{ index .metadata.annotations "openings.generops.dev/workflow-logs-container" }}'
+              clientId: '{{ index .metadata.annotations "openings.generops.dev/workflows-client-id" }}'
+            secrets:
+              enabled: true
+              clientId: '{{ index .metadata.annotations "openings.generops.dev/secrets-client-id" }}'
+              tenantId: '{{ index .metadata.annotations "openings.generops.dev/tenant-id" }}'
+              vaultUrl: '{{ index .metadata.annotations "openings.generops.dev/key-vault-url" }}'
+      destination:
+        server: '{{ .server }}'
+        namespace: openings-research
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels: # only pods meeting "restricted" may run here
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/enforce-version: latest
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }

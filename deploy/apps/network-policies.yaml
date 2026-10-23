@@ -1,0 +1,28 @@
+# Default-deny ingress for every namespace we run, plus egress limits for the research
+# namespace (deploy/network-policies). Synced last so the namespaces exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: network-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform-security
+  source:
+    repoURL: https://github.com/christufa/chess-openings-researcher.git
+    targetRevision: main
+    path: deploy/network-policies
+  destination:
+    server: https://kubernetes.default.svc
+    # Must be one of the project's destinations; each policy sets its own namespace.
+    namespace: openings-research
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

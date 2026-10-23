@@ -1,0 +1,57 @@
+# The catalog's database, secrets, service account and network policies (deploy/catalog).
+# ApplicationSet so the identity client IDs, vault URL and backup container come from the
+# cluster facts (infra/gitops/facts.tf), not from this public repository.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: catalog
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            openings.generops.dev/facts: "true"
+  template:
+    metadata:
+      name: catalog
+      annotations:
+        argocd.argoproj.io/sync-wave: "2" # after the operators (0) and Barman (1), before Lakekeeper (3)
+    spec:
+      project: openings
+      source:
+        repoURL: https://github.com/christufa/chess-openings-researcher.git
+        targetRevision: main
+        path: deploy/catalog
+        helm:
+          valuesObject:
+            catalogClientId: '{{ index .metadata.annotations "openings.generops.dev/catalog-client-id" }}'
+            backup:
+              clientId: '{{ index .metadata.annotations "openings.generops.dev/backup-client-id" }}'
+              destination: 'https://{{ index .metadata.annotations "openings.generops.dev/storage-account" }}.blob.core.windows.net/{{ index .metadata.annotations "openings.generops.dev/catalog-backups-container" }}'
+            secrets:
+              clientId: '{{ index .metadata.annotations "openings.generops.dev/secrets-client-id" }}'
+              tenantId: '{{ index .metadata.annotations "openings.generops.dev/tenant-id" }}'
+              vaultUrl: '{{ index .metadata.annotations "openings.generops.dev/key-vault-url" }}'
+      destination:
+        server: '{{ .server }}'
+        namespace: openings-catalog
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true # CNPG, Barman and ESO CRDs may not exist yet on first sync
+        managedNamespaceMetadata:
+          labels:
+            # Third-party pods (the Lakekeeper migration job) are not all "restricted"-clean:
+            # enforce baseline and report anything short of restricted.
+            pod-security.kubernetes.io/enforce: baseline
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }

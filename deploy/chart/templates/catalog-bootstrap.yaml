@@ -1,0 +1,102 @@
+# One-time (idempotent) catalog setup: bootstrap Lakekeeper, then create the research
+# warehouse over abfss://<researchContainer>@<storageAccount>. Storage access uses
+# Lakekeeper's own workload identity; clients get table-scoped SAS tokens.
+# Authorization is allowall, so there are no grants to make.
+#
+#   argo submit -n openings-research --from workflowtemplate/catalog-bootstrap --watch
+{{- if .Values.storageAccount }}
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: catalog-bootstrap
+spec:
+  serviceAccountName: openings-worker
+  entrypoint: bootstrap
+  podMetadata:
+    labels:
+      openings.generops.dev/role: worker # the catalog only admits worker and API pods
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 185
+    seccompProfile: {type: RuntimeDefault}
+  volumes:
+    - name: catalog-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: {{ .Values.catalogTokenAudience | quote }}
+              expirationSeconds: 600
+              path: token
+  templates:
+    - name: bootstrap
+      nodeSelector:
+        kubernetes.azure.com/agentpool: system # a few HTTP calls: no spot node needed
+      tolerations: []
+      container:
+        image: {{ required "workerImage digest is required" .Values.workerImage | quote }}
+        command: [python3, -c]
+        args:
+          - |
+            import json, os, sys, urllib.error, urllib.request
+
+            base = os.environ["OPENINGS_CATALOG_URI"].rsplit("/catalog", 1)[0]
+            name = os.environ["OPENINGS_WAREHOUSE"]
+            account, container = os.environ["STORAGE_ACCOUNT"], os.environ["RESEARCH_CONTAINER"]
+            token = open("/var/run/research/catalog/token").read().strip()
+
+            def call(method, path, body=None):
+                data = json.dumps(body).encode() if body is not None else None
+                request = urllib.request.Request(base + path, data=data, method=method, headers={
+                    "Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+                try:
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        raw = response.read()
+                        return response.status, json.loads(raw) if raw else None
+                except urllib.error.HTTPError as error:
+                    return error.code, error.read().decode()
+
+            status, info = call("GET", "/management/v1/info")
+            print("server info:", status, info)
+            if status != 200:
+                sys.exit("Lakekeeper is not reachable")
+            if not info.get("bootstrapped"):
+                print("bootstrap:", *call("POST", "/management/v1/bootstrap",
+                                          {"accept-terms-of-use": True, "is-operator": True}))
+
+            status, listing = call("GET", "/management/v1/warehouse")
+            names = [w["name"] for w in (listing or {}).get("warehouses", [])] if status == 200 else []
+            if name in names:
+                print(f"warehouse {name} exists")
+            else:
+                status, body = call("POST", "/management/v1/warehouse", {
+                    "warehouse-name": name,
+                    "storage-profile": {
+                        "type": "adls",
+                        "account-name": account,
+                        "filesystem": container,
+                        "key-prefix": "warehouse",
+                        "sas-token-validity-seconds": 3600,
+                    },
+                    "storage-credential": {"type": "az", "credential-type": "azure-system-identity"},
+                    # Dropped tables stay recoverable for 30 days.
+                    "delete-profile": {"type": "soft", "expiration-seconds": 2592000},
+                })
+                print("create warehouse:", status, body)
+                if status not in (200, 201):
+                    sys.exit(1)
+            print(f"ready: warehouse {name} at abfss://{container}@{account}.dfs.core.windows.net/warehouse")
+        envFrom:
+          - configMapRef: {name: openings-config}
+        env:
+          - {name: STORAGE_ACCOUNT, value: {{ .Values.storageAccount | quote }}}
+          - {name: RESEARCH_CONTAINER, value: {{ .Values.researchContainer | quote }}}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 256Mi}
+        volumeMounts:
+          - {name: catalog-token, mountPath: /var/run/research/catalog, readOnly: true}
+{{- end }}
