@@ -83,14 +83,14 @@ spec:
         path: chart/chess-engines
         helm:
           releaseName: chess-engines
-          # A values string, not valuesObject: the ApplicationSet drops nulls from objects,
-          # and `workload: null` is what removes the chart's spot-pool selector.
+          # The chart's spot switch off, not null keys: the ApplicationSet drops nulls from
+          # valuesObject, and the chart (christufa/chess-engines#8) now adds the spot selector
+          # and toleration only when spot is true.
           values: |
             image: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}/chess-engines@{{ .image.digest }}'
+            spot: false
             nodeSelector:
-              workload: null
               kubernetes.azure.com/agentpool: system
-            tolerations: []
             autoscaling: { maxReplicas: 1 }
             networkPolicy:
               allowFrom:
