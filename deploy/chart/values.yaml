@@ -16,14 +16,6 @@ researchContainer: "research"
 workflowLogs:
   container: "workflow-logs"
   clientId: ""
-# Trino serving is being replaced by direct Iceberg reads; until then the API reads
-# through Trino only when trinoHost is set.
-trinoHost: ""
-trinoPort: "8443"
-trinoCatalog: "research"
-trinoUser: "openings-api"
-trinoTokenAudience: "trino"
-caConfigMap: "internal-ca"
 secrets:
   enabled: false
   clientId: ""

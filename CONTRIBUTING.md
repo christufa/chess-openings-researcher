@@ -5,8 +5,8 @@ Terraform state/plan files, local data, or private research material. Use synthe
 fixtures for tests. Report vulnerabilities through SECURITY.md rather than issues.
 
 Run Python tests and Ruff, relevant Helm rendering checks, and Terraform
-validation for infrastructure changes. CI additionally exercises real Iceberg,
-Trino and browser behavior. Security checks cover Python/JavaScript with CodeQL
+validation for infrastructure changes. CI additionally exercises real Iceberg
+reads and writes and browser behavior. Security checks cover Python/JavaScript with CodeQL
 and reject newly introduced high/critical dependency vulnerabilities.
 
 External contributors' workflow runs require maintainer approval. All PR code

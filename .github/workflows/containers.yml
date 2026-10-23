@@ -40,7 +40,7 @@ jobs:
         run: docker build -f docker/Dockerfile.api -t openings-api:test .
       - name: Verify API starts without write access or provider keys
         run: |
-          docker run -d --name openings-api-test --read-only -p 127.0.0.1:8000:8000 openings-api:test
+          docker run -d --name openings-api-test --read-only --tmpfs /tmp:rw,size=64m -p 127.0.0.1:8000:8000 openings-api:test
           for attempt in $(seq 1 20); do
             if curl --fail http://127.0.0.1:8000/healthz; then break; fi
             sleep 1

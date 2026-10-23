@@ -5,20 +5,18 @@ tables. All research tables live in one namespace, `openings_research`, in an
 explicitly configured Iceberg warehouse. The earlier Databricks/Delta runtime has
 been removed; its workspace no longer resolves and its data is not migrated.
 
-The cluster itself is described in [infra/README.md](../infra/README.md). This
-document still describes Trino-based serving, which is being replaced by direct
-Iceberg reads from the API.
+The cluster itself is described in [infra/README.md](../infra/README.md).
 
 ## Architecture
 
 Argo batch → one Spark worker per opening → Tavily → extraction → validation →
-review → Iceberg publication → Trino → FastAPI / research explorer.
+review → Iceberg publication → FastAPI / research explorer (pyiceberg + DuckDB).
 
 Each worker runs the five stages in one process; API calls stay on the driver.
 Each table merge is atomic, but there is no transaction spanning tables. The
 `research_runs.status = completed` marker is the publication boundary. The API
 checks it before serving records and selects only completed runs for the library.
-It does not depend on Spark views being portable to Trino. Failed runs remain in
+It does not depend on Spark views being readable outside Spark. Failed runs remain in
 history. Current results are replacement snapshots, not a union of old claims.
 
 The Argo template serializes the entire batch with a namespace-scoped mutex.
@@ -51,7 +49,7 @@ docker build -f docker/Dockerfile.api -t openings-api:local .
 
 The smoke test uses a disposable Hadoop Iceberg catalog on local files, runs
 all five stages and replays them, checking that counts do not grow. It tests
-real Iceberg merges; it does not certify remote REST auth, ADLS or Trino grants.
+real Iceberg merges; it does not certify remote REST auth or ADLS access.
 `exec` on the temporary filesystem allows the Parquet compression JNI library
 to load. The root filesystem remains read-only and the process is non-root.
 
@@ -81,15 +79,22 @@ ID; changed code/prompts require a new workflow. There is no scheduled research.
 Do not garbage-collect source versions referenced by historical evidence. Iceberg
 compaction and snapshot maintenance need a separately scoped operational policy.
 
+## Serving
+
+The API reads Iceberg directly: pyiceberg loads each table the query names from the
+REST catalog (signed in with the pod's projected `lakekeeper` token, re-read when it
+rotates), scans it with the SAS token Lakekeeper vends, and DuckDB runs the reader's
+parameterized SQL over the Arrow data in memory. Research tables are small, so whole
+tables are scanned and cached until their snapshot changes. There is no query engine
+to run and no storage role on the API. Readiness means the catalog answered and the
+research namespace is listable.
+
 ## Next milestones
 
-1. Serve the explorer from Iceberg directly (pyiceberg + DuckDB) instead of Trino;
-   deploy a fixture and verify it through the explorer.
-2. Export/import existing Delta runs with ID preservation and reconciliation,
-   rather than silently starting an empty library or copying partial publications.
-3. Add ECO/alias identities, curated branch benchmarks, and gap-directed collection.
-4. Add explicit request budgets, human adjudication and quality regression gates.
-5. Connect aggregate games statistics through the existing read-only data API;
+1. Deploy a fixture and verify it through the explorer on the cluster.
+2. Add ECO/alias identities, curated branch benchmarks, and gap-directed collection.
+3. Add explicit request budgets, human adjudication and quality regression gates.
+4. Connect aggregate games statistics through the existing read-only data API;
    opening-name matching alone is not a reliable position join.
 
 References: [Iceberg Spark writes](https://iceberg.apache.org/docs/latest/spark-writes/),

@@ -8,7 +8,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .serving import ResearchReader, StoreUnavailable, TrinoReader
+from .serving import IcebergReader, ResearchReader, StoreUnavailable
 
 PageSize = Annotated[int, Query(ge=1, le=100)]
 Offset = Annotated[int, Query(ge=0, le=10000)]
@@ -19,9 +19,9 @@ def create_app(reader=None):
     app = FastAPI(
         title="Openings Research", version="0.4.0", docs_url="/api/docs", openapi_url="/api/openapi.json"
     )
-    reader = reader or ResearchReader(
-        TrinoReader(), os.getenv("OPENINGS_READ_NAMESPACE", "research.openings_research")
-    )
+    if reader is None:
+        namespace = os.getenv("OPENINGS_READ_NAMESPACE", "research.openings_research")
+        reader = ResearchReader(IcebergReader(namespace), namespace)
 
     @app.exception_handler(StoreUnavailable)
     async def unavailable(request: Request, exc: StoreUnavailable):
@@ -41,7 +41,8 @@ def create_app(reader=None):
 
     @app.get("/readyz")
     def ready():
-        reader.db.query("SELECT 1 AS ok")
+        # Catalog reachable and the research namespace readable; table reads are per request.
+        reader.db.ping() if hasattr(reader.db, "ping") else reader.db.query("SELECT 1 AS ok")
         return {"status": "ok"}
 
     @app.get("/api/v1/openings")
