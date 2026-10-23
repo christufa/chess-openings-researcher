@@ -5,7 +5,9 @@
 #   images workflow, which commits the digest to its deploy-state branch
 #   (chess-engines.yaml). Until the first build lands the generator yields nothing, and
 #   this Application does not exist yet.
-# - Pods run on the spot batch pool; KEDA (the AKS add-on) scales them 1 → 3 on request load.
+# - Pods run on the on-demand system pool, not the chart's default spot pool: spot cores are
+#   a per-subscription regional quota that other clusters' batch pools can use up. KEDA is
+#   capped at one replica (two engine processes) to keep that pool's cost bounded.
 # - Ingress (the chart's CiliumNetworkPolicy): openings-research, argo and cloudflared only.
 #   Other projects come in through cloudflared at chess-engines.<domain>, which Cloudflare
 #   Access opens to service tokens only (infra/gitops/edge.tf).
@@ -83,6 +85,11 @@ spec:
           releaseName: chess-engines
           valuesObject:
             image: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}/chess-engines@{{ .image.digest }}'
+            nodeSelector:
+              workload: null # drop the chart's spot-pool default
+              kubernetes.azure.com/agentpool: system
+            tolerations: []
+            autoscaling: { maxReplicas: 1 }
             networkPolicy:
               allowFrom:
                 - namespace: openings-research # research batch jobs

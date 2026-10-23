@@ -39,9 +39,14 @@ spec:
               path: token
   templates:
     - name: evaluate
+      # On-demand, beside the engine: mostly waiting on HTTP, and spot cores can be taken by
+      # other clusters in the subscription.
+      nodeSelector:
+        kubernetes.azure.com/agentpool: system
+      tolerations: []
       retryStrategy:
         limit: "2"
-        retryPolicy: OnError # spot evictions; already-evaluated positions are skipped on retry
+        retryPolicy: OnError # already-evaluated positions are skipped on retry
       container:
         image: {{ required "workerImage digest is required" .Values.workerImage | quote }}
         command: [/opt/spark/bin/spark-submit, --master, "local[2]", --driver-memory, 2g, /opt/research/run_evaluate.py]
