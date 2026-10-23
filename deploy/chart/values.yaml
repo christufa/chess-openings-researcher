@@ -7,7 +7,11 @@ warehouse: "openings-research"
 catalog: "research"
 fileIO: "org.apache.iceberg.azure.adlsv2.ADLSFileIO"
 catalogTokenAudience: "lakekeeper"
-providerSecret: "openings-provider-keys"
+providerSecret: "openings-provider-keys" # TAVILY_API_KEY only; the model needs no key
+# Keyless Azure OpenAI: the worker signs in with its workload identity. Empty = the
+# public OpenAI API with OPENAI_API_KEY (local use only).
+azureOpenAI:
+  endpoint: ""
 # Where catalog-bootstrap points the warehouse: abfss://<researchContainer>@<storageAccount>.
 storageAccount: ""
 researchContainer: "research"

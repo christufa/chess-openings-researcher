@@ -33,6 +33,7 @@ variables {
   subscription_id            = "00000000-0000-0000-0000-000000000001"
   state_resource_group_name  = "rg-openings-tfstate"
   state_storage_account_name = "stopeningsstate"
+  github_oidc_repository     = "christufa/chess-openings-researcher" # independent of any local tfvars
 }
 
 run "lean_private_cluster" {
@@ -69,6 +70,14 @@ run "lean_private_cluster" {
   assert {
     condition     = endswith(azurerm_role_assignment.workload["catalog-data"].scope, "/containers/research") && endswith(azurerm_role_assignment.workload["backup-data"].scope, "/containers/catalog-backups")
     error_message = "Data roles must be scoped to their own containers."
+  }
+  assert {
+    condition     = !azurerm_cognitive_account.openai.local_auth_enabled && azurerm_cognitive_account.openai.network_acls[0].default_action == "Deny"
+    error_message = "Azure OpenAI must have keys disabled and deny all but the AKS subnet."
+  }
+  assert {
+    condition     = azurerm_role_assignment.worker_openai.role_definition_name == "Cognitive Services OpenAI User" && azurerm_cognitive_deployment.research.sku[0].name == "DataZoneStandard"
+    error_message = "Only the worker identity may call the model, inside the US data zone."
   }
   assert {
     condition     = output.capacity_requirements["standardDASv5Family"].startup == 4 && output.capacity_requirements["lowPriorityCores"].startup == 0

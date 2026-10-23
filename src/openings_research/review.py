@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 
 from pydantic import Field, create_model
 
+from .agents import openai_client, reasoning_options
 from .contracts import Contract
 from .taxonomy import TAXONOMY_PROMPT, ClaimCategory
 
@@ -76,9 +77,7 @@ def validate_reviews(output: ReviewOutput, candidates: list[dict]) -> None:
 
 class OpenAIReviewer:
     def __init__(self, api_key: str, model: str):
-        from openai import OpenAI
-
-        self.client = OpenAI(api_key=api_key, timeout=120, max_retries=2)
+        self.client = openai_client(api_key)
         self.model = model
 
     def review(self, opening: str, candidates: list[dict], source_urls: dict[str, str]) -> ReviewExtraction:
@@ -100,6 +99,7 @@ class OpenAIReviewer:
             model=self.model,
             store=False,
             max_output_tokens=8000,
+            **reasoning_options(self.model),
             input=[
                 {"role": "system", "content": REVIEW_PROMPT},
                 {

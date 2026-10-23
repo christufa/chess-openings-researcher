@@ -26,6 +26,14 @@ output "ci_client_id" {
 
 # ---- Read by ../gitops and written into the cluster facts ----
 
+output "openai_endpoint" {
+  value = azurerm_cognitive_account.openai.endpoint
+}
+
+output "openai_deployment" {
+  value = azurerm_cognitive_deployment.research.name
+}
+
 output "identity_client_ids" {
   value = { for name, identity in azurerm_user_assigned_identity.workload : name => identity.client_id }
 }
