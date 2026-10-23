@@ -150,3 +150,12 @@ def test_openai_review_preserves_wire_output_and_restores_candidate_ids():
     assert result.output.reviews[0].category == "assessment"
     assert json.loads(result.raw_response)["candidate_aliases"] == {"c0001": "original-id"}
     validate_reviews(result.output, [candidate("original-id")])
+
+
+def test_prompts_keep_research_within_the_requested_opening():
+    from openings_research.agents import SYSTEM_PROMPT
+    from openings_research.review import REVIEW_PROMPT
+
+    assert "Stay within the requested opening" in SYSTEM_PROMPT
+    assert "Every candidate must belong to the requested opening" in REVIEW_PROMPT
+    assert "transpositions count" in SYSTEM_PROMPT and "transpositions count" in REVIEW_PROMPT
