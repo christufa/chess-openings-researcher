@@ -8,14 +8,8 @@ data:
   OPENINGS_WAREHOUSE: {{ .Values.warehouse | quote }}
   OPENINGS_FILE_IO: {{ .Values.fileIO | quote }}
   OPENINGS_CATALOG_TOKEN_FILE: /var/run/research/catalog/token
-  OPENINGS_READ_NAMESPACE: {{ printf "%s.openings_research" .Values.trinoCatalog | quote }}
-  {{- if .Values.trinoHost }}
-  OPENINGS_TRINO_HOST: {{ .Values.trinoHost | quote }}
-  OPENINGS_TRINO_PORT: {{ .Values.trinoPort | quote }}
-  OPENINGS_TRINO_USER: {{ .Values.trinoUser | quote }}
-  OPENINGS_TRINO_TOKEN_FILE: /var/run/research/trino/token
-  OPENINGS_TRINO_CA_FILE: /var/run/research/ca/ca.crt
-  {{- end }}
+  # The API reads the same catalog and warehouse; "<catalog>.<schema>" names its tables.
+  OPENINGS_READ_NAMESPACE: {{ printf "%s.openings_research" .Values.catalog | quote }}
 ---
 # Workflow pods run as this account. With workflowLogs.clientId it also signs in to Azure
 # as the workflows identity, whose only role is writing the workflow-logs container.

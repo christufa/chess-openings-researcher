@@ -1,7 +1,3 @@
-import json
-import re
-import sqlite3
-
 import pytest
 from fastapi.testclient import TestClient
 from test_pipeline import MemoryStore, config, execute_all
@@ -9,30 +5,29 @@ from test_pipeline import MemoryStore, config, execute_all
 from openings_research.api import create_app
 from openings_research.pipeline import Pipeline
 from openings_research.schema import TABLES
-from openings_research.serving import ResearchReader, StoreUnavailable
+from openings_research.serving import ArrowSQL, IcebergReader, ResearchReader, StoreUnavailable
+
+ARROW_TYPES = {"STRING": "string", "BOOLEAN": "bool", "INT": "int32", "ARRAY<STRING>": "list<string>"}
 
 
-class SQLiteReader:
-    def __init__(self, store):
-        self.connection = sqlite3.connect(":memory:", check_same_thread=False)
-        self.connection.row_factory = sqlite3.Row
-        for table, ddl in TABLES.items():
-            self.connection.execute(f"CREATE TABLE {table} ({ddl.replace('ARRAY<STRING>', 'TEXT')})")
-            for row in store.read(table):
-                values = [json.dumps(v) if isinstance(v, list) else v for v in row.values()]
-                self.connection.execute(
-                    f"INSERT INTO {table} ({','.join(row)}) VALUES ({','.join('?' for _ in row)})", values
-                )
+def arrow_schema(table):
+    import pyarrow as pa
 
-    def query(self, sql, parameters=()):
-        # SQLite reverses Trino pagination syntax; preserve bind meaning explicitly.
-        if "OFFSET ? LIMIT ?" in sql:
-            sql = re.sub(r"OFFSET \? LIMIT \?", "LIMIT ? OFFSET ?", sql)
-            parameters = (*parameters[:-2], parameters[-1], parameters[-2])
-        return [
-            dict(r)
-            for r in self.connection.execute(sql.replace("research.openings_research.", ""), parameters)
-        ]
+    types = {"string": pa.string(), "bool": pa.bool_(), "int32": pa.int32(), "list<string>": pa.list_(pa.string())}
+    columns = [column.split(" ", 1) for column in TABLES[table].split(", ")]
+    return pa.schema([(name, types[ARROW_TYPES[kind]]) for name, kind in columns])
+
+
+def arrow_tables(store):
+    import pyarrow as pa
+
+    return {table: pa.Table.from_pylist(store.read(table), schema=arrow_schema(table)) for table in TABLES}
+
+
+def memory_reader(store):
+    """The production SQL path (DuckDB over Arrow) on the in-memory pipeline output."""
+    tables = arrow_tables(store)
+    return ArrowSQL(tables.__getitem__)
 
 
 @pytest.fixture
@@ -48,10 +43,8 @@ def client():
     }
     store.upsert("research_runs", [partial])
     store.upsert("claims", [{**store.read("claims")[0], "record_id": "partial", "run_id": "partial"}])
-    reader = SQLiteReader(store)
-    with TestClient(create_app(ResearchReader(reader))) as client:
+    with TestClient(create_app(ResearchReader(memory_reader(store)))) as client:
         yield client
-    reader.connection.close()
 
 
 def test_publication_boundary_and_history(client):
@@ -107,3 +100,33 @@ def test_backend_error_does_not_leak_credentials():
 def test_namespace_validation():
     with pytest.raises(ValueError):
         ResearchReader(None, "research.openings;DROP")
+
+
+def test_reads_a_real_iceberg_catalog_and_caches_by_snapshot(tmp_path):
+    from pyiceberg.catalog.sql import SqlCatalog
+
+    store = MemoryStore()
+    execute_all(Pipeline(store, "published", config()))
+    catalog = SqlCatalog("research", uri=f"sqlite:///{tmp_path}/catalog.db", warehouse=f"file://{tmp_path}")
+    catalog.create_namespace("openings_research")
+    for name, data in arrow_tables(store).items():
+        catalog.create_table(("openings_research", name), schema=data.schema).append(data)
+    iceberg = IcebergReader(catalog=catalog)
+    with TestClient(create_app(ResearchReader(iceberg))) as client:
+        assert client.get("/readyz").status_code == 200
+        assert client.get("/api/v1/openings").json()["items"][0]["run_id"] == "published"
+        line = client.get("/api/v1/runs/published/lines").json()["items"][0]
+        assert line["moves_san"] == ["e4", "e5", "Nf3", "Nc6", "Bc4"]
+        cached = iceberg._snapshots["research_runs"][1]
+        client.get("/api/v1/openings")
+        assert iceberg._snapshots["research_runs"][1] is cached  # unchanged snapshot: no rescan
+        runs = catalog.load_table(("openings_research", "research_runs"))
+        runs.append(arrow_tables(store)["research_runs"].slice(0, 0))  # empty commit, new snapshot
+        client.get("/api/v1/openings")
+        assert iceberg._snapshots["research_runs"][1] is not cached
+
+
+def test_unreachable_catalog_is_not_ready(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENINGS_CATALOG_TOKEN_FILE", str(tmp_path / "missing-token"))
+    with TestClient(create_app(ResearchReader(IcebergReader()))) as client:
+        assert client.get("/readyz").status_code == 503
