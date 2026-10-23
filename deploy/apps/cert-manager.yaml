@@ -36,6 +36,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
+  # cert-manager's CA injector fills in caBundle on its own webhooks (annotation
+  # cert-manager.io/inject-ca-from-secret); the chart leaves it empty, so without this the
+  # app shows OutOfSync forever. RespectIgnoreDifferences keeps syncs from blanking it.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
   syncPolicy:
     automated:
       prune: true
@@ -43,6 +53,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff: { duration: 30s, factor: 2, maxDuration: 5m }

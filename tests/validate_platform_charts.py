@@ -57,6 +57,11 @@ def check_gitops(platform):
     for forbidden in ("ingress", "LoadBalancer", "cloudflared"):
         assert forbidden not in rendered, f"nothing may be published: found {forbidden}"
 
+    # cert-manager injects caBundle into its webhooks; Argo CD must ignore it, not undo it.
+    certs = next(obj for obj in apps if obj["metadata"]["name"] == "cert-manager")["spec"]
+    assert {d["kind"] for d in certs["ignoreDifferences"]} == {"ValidatingWebhookConfiguration", "MutatingWebhookConfiguration"}
+    assert "RespectIgnoreDifferences=true" in certs["syncPolicy"]["syncOptions"]
+
     # The admission policy and the Argo Workflows chart must pin the same executor digest.
     workflows = next(obj for obj in apps if obj["metadata"]["name"] == "argo-workflows")
     executor = workflows["spec"]["source"]["helm"]["valuesObject"]["executor"]["image"]["tag"]
