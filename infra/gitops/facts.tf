@@ -21,6 +21,8 @@ locals {
     "backup-client-id"          = local.compute.identity_client_ids["backup"]
     "workflows-client-id"       = local.compute.identity_client_ids["workflows"]
     "secrets-client-id"         = local.compute.identity_client_ids["secrets"]
+    "openai-endpoint"           = local.compute.openai_endpoint
+    "openai-deployment"         = local.compute.openai_deployment
   }
 }
 

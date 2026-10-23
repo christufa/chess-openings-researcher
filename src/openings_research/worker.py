@@ -18,8 +18,8 @@ def main():
     parser.add_argument("--agent", choices=["fixture", "openai"], default="openai")
     parser.add_argument("--mode", choices=["refresh", "reextract"], default="refresh")
     parser.add_argument("--source-run-id", default="")
-    parser.add_argument("--model", default="gpt-4.1-mini")
-    parser.add_argument("--review-model", default="gpt-4.1-mini")
+    parser.add_argument("--model", default="gpt-5.4-mini")  # Azure OpenAI deployment name
+    parser.add_argument("--review-model", default="gpt-5.4-mini")
     args = parser.parse_args()
     if args.mode == "reextract" and (not args.source_run_id or args.source_run_id == args.run_id):
         parser.error("Re-extraction requires a different source run ID")

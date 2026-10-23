@@ -1,7 +1,7 @@
 # One on-demand system node for the always-on services (Argo CD, Argo Workflows,
-# Lakekeeper and its database, External Secrets, the API). infra/capacity.json caps it at
-# one node until the D*as_v5 family quota is raised (it is shared with lichess-delta-kube);
-# then set the system pool's max_count back to 2 so it can grow when requests need it. Research runs on a spot pool that scales from zero, one
+# Lakekeeper and its database, External Secrets, the API), growing to two only when their
+# requests need it. The D*as_v5 family quota is shared with lichess-delta-kube; check it
+# with the preflight before raising max_count in infra/capacity.json. Research runs on a spot pool that scales from zero, one
 # serialized batch at a time. Idle cost is one node, its disk and the load balancer.
 #
 # Nothing is published: no ingress, gateway or DNS record. The API server is public

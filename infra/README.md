@@ -9,7 +9,7 @@ published to the internet: there is no ingress, gateway or DNS record.
 |---|---|---|
 | `bootstrap` | State account (operator IP only, versioned, locked) and the monthly budget | local, then migrated |
 | `platform` | Resource group, VNet + AKS subnet (service endpoints), research storage account with `research`, `catalog-backups` and `workflow-logs` containers | `platform.tfstate` |
-| `compute` | AKS (Free tier, system pool of 1 node until the quota increase, then 1–2; spot `batch` pool 0–1), ACR, Key Vault, workload identities, GitHub OIDC push identity | `compute.tfstate` |
+| `compute` | Keyless Azure OpenAI (`gpt-5.4-mini`, DataZoneStandard), AKS (Free tier, system pool 1–2, spot `batch` pool 0–1), ACR, Key Vault, workload identities, GitHub OIDC push identity | `compute.tfstate` |
 | `gitops` | Argo CD, the root app-of-apps (`deploy/apps`) and the cluster facts | `gitops.tfstate` |
 
 Node pools and quotas come from [`capacity.json`](capacity.json), which both
@@ -51,6 +51,7 @@ Check quota first. The spot quota (`lowPriorityCores`) is shared with any other
 cluster in the subscription:
 
 ```powershell
+python -m pip install -e .   # once, from the repository root
 python -m openings_research.azure_preflight --subscription <subscription-id>
 ```
 
@@ -67,9 +68,10 @@ Then, from `infra/`, with your `az login` session:
    `terraform init "-backend-config=../state.tfbackend"`, a saved plan and its apply.
    `gitops` needs `kubelogin` (`az aks install-cli`); Argo CD then syncs `deploy/apps`
    (see [deploy/README.md](../deploy/README.md) for the sync order and first bring-up).
-4. Put `openai-api-key`, `tavily-api-key` and `catalog-encryption-key` in the Key
-   Vault (your IP added first). Keep a copy of the encryption key outside Azure:
-   without it, a restored catalog database cannot decrypt its stored settings.
+4. Put `tavily-api-key` and `catalog-encryption-key` in the Key Vault (your IP added
+   first). Keep a copy of the encryption key outside Azure: without it, a restored catalog
+   database cannot decrypt its stored settings. The model needs no key: the worker calls
+   Azure OpenAI as its workload identity, and the account has key authentication disabled.
 
 ## GitHub secrets for the images workflow
 
@@ -82,9 +84,11 @@ credentials, but secrets are masked in this public repository's logs:
 | `AZURE_TENANT_ID` | your tenant ID |
 | `ACR_LOGIN_SERVER` | `terraform -chdir=compute output -raw acr_login_server` |
 
-The CI identity trusts `repo:christufa/chess-openings-researcher:ref:refs/heads/main`. If
-the repository uses GitHub's ID-based OIDC subject claims, change the subject in
-`compute/registry.tf` to match the subject the workflow prints.
+The CI identity trusts `repo:<github_oidc_repository>:ref:refs/heads/main`. This repository
+uses GitHub's immutable subject format (`owner@<owner-id>/<repo>@<repo-id>`), so set
+`github_oidc_repository` in `compute/terraform.tfvars` to the `sub_claim_prefix` that
+`gh api repos/<owner>/<repo>/actions/oidc/customization/sub` reports, without `repo:`.
+The images workflow prints the subject it presents if sign-in fails.
 
 ## Recovery
 

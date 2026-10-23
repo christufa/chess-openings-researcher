@@ -178,3 +178,22 @@ def test_openai_adapter_uses_constrained_references_and_saves_wire_response():
     assert raw["passages"][0]["source_version_id"] == document.source_version_id
     assert result.output.claims[0].evidence[0].excerpt == document.content
     assert json.loads(result.usage_json)["total_tokens"] == 120
+
+
+def test_azure_endpoint_makes_the_client_keyless(monkeypatch):
+    from openings_research.agents import openai_client
+
+    monkeypatch.setenv("OPENINGS_AZURE_OPENAI_ENDPOINT", "https://oai-example.openai.azure.com/")
+    client = openai_client("must-not-be-used")
+    assert str(client.base_url) == "https://oai-example.openai.azure.com/openai/v1/"
+    assert callable(client._api_key_provider)  # an Entra token per request
+    assert client.api_key == ""  # the passed key is never used
+    monkeypatch.delenv("OPENINGS_AZURE_OPENAI_ENDPOINT")
+    assert openai_client("local-key").api_key == "local-key"
+
+
+def test_reasoning_effort_only_for_reasoning_models():
+    from openings_research.agents import reasoning_options
+
+    assert reasoning_options("gpt-5.4-mini") == {"reasoning": {"effort": "low"}}
+    assert reasoning_options("gpt-4.1-mini") == {}

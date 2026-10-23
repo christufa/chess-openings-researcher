@@ -85,6 +85,9 @@ def main():
     assert len(databases) == 1
     assert databases[0]["spec"]["plugins"][0]["isWALArchiver"] is True
     assert any(obj["kind"] == "ScheduledBackup" for obj in catalog)
+    review = next(obj for obj in catalog if obj["kind"] == "ClusterRoleBinding")
+    assert review["roleRef"]["name"] == "system:auth-delegator"  # Lakekeeper verifies tokens
+    assert review["subjects"] == [{"kind": "ServiceAccount", "name": "lakekeeper", "namespace": "openings-catalog"}]
     policy = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
     assert policy["spec"]["validationActions"] == ["Deny"]
 
@@ -95,10 +98,11 @@ def main():
     assert not any(obj["metadata"]["name"] == "catalog-bootstrap" for obj in minimal)
     research = render("chart", "openings-research", {
         **secrets, **images, "secrets.enabled": "true", "storageAccount": "fixture",
+        "azureOpenAI.endpoint": "https://oai-fixture.openai.azure.com/",
         "workflowLogs.clientId": "fixture"})
     check_pods(research)
     providers = next(obj for obj in research if obj["kind"] == "ExternalSecret")
-    assert {item["secretKey"] for item in providers["spec"]["data"]} == {"OPENAI_API_KEY", "TAVILY_API_KEY"}
+    assert {item["secretKey"] for item in providers["spec"]["data"]} == {"TAVILY_API_KEY"}  # model is keyless
     api = next(obj for obj in research if obj["kind"] == "Deployment")
     assert api["spec"]["template"]["metadata"]["labels"]["openings.generops.dev/role"] == "api"
     for container in api["spec"]["template"]["spec"]["containers"]:
@@ -106,6 +110,8 @@ def main():
     tokens = [v["projected"]["sources"][0]["serviceAccountToken"] for v in api["spec"]["template"]["spec"]["volumes"]
               if "projected" in v]
     assert [t["audience"] for t in tokens] == ["lakekeeper"]  # catalog only; no other credential
+    config = next(obj for obj in research if obj["metadata"]["name"] == "openings-config")
+    assert config["data"]["OPENINGS_AZURE_OPENAI_ENDPOINT"] == "https://oai-fixture.openai.azure.com/"
     names = {obj["metadata"]["name"] for obj in research}
     assert {"openings-batch", "catalog-bootstrap", "artifact-repositories"} <= names
     worker = next(obj for obj in research if obj["kind"] == "ServiceAccount" and obj["metadata"]["name"] == "openings-worker")
