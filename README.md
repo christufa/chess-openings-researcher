@@ -2,8 +2,9 @@
 
 A replayable opening-research pipeline that collects web sources, extracts and
 validates chess claims, and stores the results in Iceberg on a lean, private Azure
-Kubernetes platform. The purpose is data collection: nothing is published to the
-internet, and the read-only explorer is reached with `kubectl port-forward`.
+Kubernetes platform. The read-only explorer is public at
+https://chess-openings.generops.dev (rate-limited per client); the operator UIs are behind
+Cloudflare Access. Everything else stays private.
 
 Agents produce candidates; the pipeline owns source snapshots, chess validation,
 publication, and run history. Game ingestion remains outside this application's scope.

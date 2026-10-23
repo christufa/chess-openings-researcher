@@ -14,6 +14,10 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 3.3"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.27"
+    }
   }
 
   # Partial backend config, like platform and compute:
@@ -60,3 +64,7 @@ provider "helm" {
     exec                   = local.kube.exec
   }
 }
+
+# Cloudflare: reads CLOUDFLARE_API_TOKEN from the environment (never put it in a file).
+# Needs Zone DNS Edit on the zone plus Account Cloudflare Tunnel and Access edit rights.
+provider "cloudflare" {}

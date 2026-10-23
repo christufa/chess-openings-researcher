@@ -1,0 +1,27 @@
+# cloudflared (deploy/cloudflared): the Cloudflare Tunnel connector for chess-openings*.
+# The namespace and the tunnel token Secret are created by infra/gitops (edge.tf).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflared
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openings
+  source:
+    repoURL: https://github.com/christufa/chess-openings-researcher.git
+    targetRevision: main
+    path: deploy/cloudflared
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflared
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

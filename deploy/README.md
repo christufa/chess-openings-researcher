@@ -38,10 +38,19 @@ To roll back, `git revert` the commit on `deploy-state`. Admission in the cluste
 that every research image is a digest from this registry, which only CI and you can push
 to; signatures are verified at publish time, not again at admission.
 
-## Nothing is published
+## Entry from the internet
 
-No Ingress, Gateway, LoadBalancer Service or tunnel. Reach the UIs with port-forward,
-which needs your Entra sign-in and an authorized IP:
+The only way in is an outbound Cloudflare Tunnel (`deploy/cloudflared`, routes in
+`infra/gitops/edge.tf`); there is no Ingress, Gateway or LoadBalancer Service.
+
+| Hostname | What | Access |
+|---|---|---|
+| `chess-openings.generops.dev` | Research explorer and read-only API | Public; the API rate-limits per client IP (`CF-Connecting-IP`) |
+| `chess-openings-cd.generops.dev` | Argo CD | Cloudflare Access, Microsoft sign-in, owner only |
+| `chess-openings-flows.generops.dev` | Argo Workflows | Cloudflare Access, Microsoft sign-in, owner only |
+
+Network policies let cloudflared reach only those three Services. Port-forward still
+works and needs your Entra sign-in and an authorized IP:
 
 ```powershell
 kubectl port-forward -n argocd service/argocd-server 8080:443
@@ -74,7 +83,7 @@ kubectl port-forward -n openings-research service/openings-api 8000:80
   boundary. Only pods labelled `openings.generops.dev/role: worker` or `api` in
   `openings-research` can reach it, and only Lakekeeper and the CNPG operator can reach
   the database.
-- **Research namespace**: no ingress. Egress only to cluster DNS, Lakekeeper, the
+- **Research namespace**: ingress only from cloudflared to the explorer API. Egress only to cluster DNS, Lakekeeper, the
   Kubernetes API and port 443 on the internet (providers, Entra ID, storage). Filtering
   by domain name would need Advanced Container Networking Services.
 - **Workflow pods** run on the spot `batch` pool (Argo `workflowDefaults`), except

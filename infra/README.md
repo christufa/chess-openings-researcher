@@ -2,8 +2,10 @@
 
 A lean, private Azure platform for collecting opening research: one AKS cluster
 that idles at a single node, an ADLS Gen2 account for the Iceberg warehouse and
-catalog backups, a Key Vault for provider keys, and a Basic registry. Nothing is
-published to the internet: there is no ingress, gateway or DNS record.
+catalog backups, a Key Vault for provider keys, and a Basic registry. The only way in
+from the internet is a Cloudflare Tunnel (`gitops/edge.tf`): the explorer is public at
+`chess-openings.generops.dev`, and Argo CD / Argo Workflows are behind Cloudflare Access
+at `chess-openings-cd` / `chess-openings-flows`. No ingress, load balancer or open port.
 
 | Stack | What | State |
 |---|---|---|
@@ -72,6 +74,15 @@ Then, from `infra/`, with your `az login` session:
    first). Keep a copy of the encryption key outside Azure: without it, a restored catalog
    database cannot decrypt its stored settings. The model needs no key: the worker calls
    Azure OpenAI as its workload identity, and the account has key authentication disabled.
+
+## Cloudflare (gitops)
+
+`gitops` also manages the tunnel, the Access applications and the DNS records. It needs
+`CLOUDFLARE_API_TOKEN` in the environment (Zone DNS Edit on the zone, plus Account
+Cloudflare Tunnel and Access edit rights) and, in `gitops/terraform.tfvars`:
+`cloudflare_account_id`, `cloudflare_zone_id`, `cloudflare_team_name`,
+`access_allowed_emails` and `access_identity_provider_id`. The identity provider is
+lichess-delta-kube's Microsoft Entra ID provider in the same Cloudflare account.
 
 ## GitHub secrets for the images workflow
 

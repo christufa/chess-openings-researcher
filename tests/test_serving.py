@@ -130,3 +130,22 @@ def test_unreachable_catalog_is_not_ready(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENINGS_CATALOG_TOKEN_FILE", str(tmp_path / "missing-token"))
     with TestClient(create_app(ResearchReader(IcebergReader()))) as client:
         assert client.get("/readyz").status_code == 503
+
+
+def test_rate_limit_per_client_ip_on_api_only():
+    from openings_research.api import RateLimiter
+
+    store = MemoryStore()
+    execute_all(Pipeline(store, "published", config()))
+    clock = [0.0]
+    limiter = RateLimiter(per_second=1, burst=2, timer=lambda: clock[0])
+    with TestClient(create_app(ResearchReader(memory_reader(store)), limiter)) as client:
+        visitor = {"CF-Connecting-IP": "203.0.113.5"}
+        assert client.get("/api/v1/openings", headers=visitor).status_code == 200
+        assert client.get("/api/v1/openings", headers=visitor).status_code == 200
+        limited = client.get("/api/v1/openings", headers=visitor)
+        assert limited.status_code == 429 and limited.headers["Retry-After"] == "1"
+        assert client.get("/api/v1/openings", headers={"CF-Connecting-IP": "203.0.113.6"}).status_code == 200
+        assert client.get("/", headers=visitor).status_code == 200  # static explorer is not limited
+        clock[0] += 1.0  # one token refilled
+        assert client.get("/api/v1/openings", headers=visitor).status_code == 200

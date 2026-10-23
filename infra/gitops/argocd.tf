@@ -1,10 +1,10 @@
 # Argo CD, plus one root Application ("app-of-apps") that syncs deploy/apps from git.
 # Everything after this is managed by Argo CD from the repository.
 #
-# Argo CD is never exposed: no ingress, no SSO app. Reach it with
-#   kubectl port-forward -n argocd service/argocd-server 8080:443
-# which already requires your Entra sign-in and an authorized IP. The local admin
-# password is in argocd-initial-admin-secret, readable only by cluster admins.
+# Argo CD is reached at https://<prefix>-cd.<domain> behind Cloudflare Access (edge.tf),
+# or with kubectl port-forward -n argocd service/argocd-server 8080:443. No ingress or
+# load balancer. The local admin password is in argocd-initial-admin-secret, readable
+# only by cluster admins.
 
 resource "kubernetes_namespace_v1" "argocd" {
   metadata {
@@ -26,6 +26,7 @@ resource "helm_release" "argocd" {
     notifications = { enabled = false }
     configs = {
       cm = {
+        url                       = "https://${local.private_hosts.cd.hostname}"
         "admin.enabled"           = "true"
         "users.anonymous.enabled" = "false"
       }

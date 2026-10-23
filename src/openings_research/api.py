@@ -1,6 +1,8 @@
 """Read-only research explorer. Run with uvicorn openings_research.api:app."""
 
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -15,13 +17,68 @@ Offset = Annotated[int, Query(ge=0, le=10000)]
 RunID = Annotated[str, Query(min_length=1, max_length=200)]
 
 
-def create_app(reader=None):
+class RateLimiter:
+    """Token bucket per client: `burst` requests at once, refilled at `per_second`.
+
+    Per replica and in memory, like lichess-delta-kube's public API. Buckets idle long
+    enough to be full again are dropped, so memory stays bounded by active clients.
+    """
+
+    def __init__(self, per_second: float, burst: int, timer=time.monotonic):
+        self.per_second, self.burst, self._timer = per_second, burst, timer
+        self._idle = burst / per_second if per_second > 0 else 60.0
+        self._buckets: dict[str, tuple[float, float]] = {}
+        self._lock = threading.Lock()
+
+    @property
+    def enabled(self) -> bool:
+        return self.per_second > 0 and self.burst > 0
+
+    def take(self, key: str) -> float:
+        """Takes one token: 0 if allowed, else the seconds until one is free."""
+        now = self._timer()
+        with self._lock:
+            if len(self._buckets) > 10_000:
+                self._buckets = {k: v for k, v in self._buckets.items() if now - v[1] < self._idle}
+            tokens, last = self._buckets.get(key, (float(self.burst), now))
+            tokens = min(float(self.burst), tokens + (now - last) * self.per_second)
+            if tokens >= 1:
+                self._buckets[key] = (tokens - 1, now)
+                return 0.0
+            self._buckets[key] = (tokens, now)
+            return (1 - tokens) / self.per_second
+
+
+def client_ip(request: Request) -> str:
+    # Public traffic arrives only through the Cloudflare Tunnel (network policy admits only
+    # cloudflared), and Cloudflare sets CF-Connecting-IP to the visitor's address.
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
+
+
+def create_app(reader=None, limiter=None):
     app = FastAPI(
         title="Openings Research", version="0.4.0", docs_url="/api/docs", openapi_url="/api/openapi.json"
     )
     if reader is None:
         namespace = os.getenv("OPENINGS_READ_NAMESPACE", "research.openings_research")
         reader = ResearchReader(IcebergReader(namespace), namespace)
+
+    limiter = limiter or RateLimiter(
+        float(os.getenv("OPENINGS_RATE_LIMIT_PER_SECOND", "5")), int(os.getenv("OPENINGS_RATE_LIMIT_BURST", "60"))
+    )
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        # Only the API is limited; the explorer's static files are cheap.
+        if request.url.path.startswith("/api/") and limiter.enabled:
+            wait = limiter.take(client_ip(request))
+            if wait:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests"},
+                    headers={"Retry-After": str(max(1, round(wait)))},
+                )
+        return await call_next(request)
 
     @app.exception_handler(StoreUnavailable)
     async def unavailable(request: Request, exc: StoreUnavailable):
