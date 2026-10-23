@@ -1,4 +1,4 @@
 apiVersion: v2
 name: openings-platform-base
-description: Private namespaces and certificate authority
+description: Image admission for the research namespace
 version: 0.1.0

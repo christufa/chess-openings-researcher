@@ -1,6 +1,6 @@
 apiVersion: v2
 name: openings-catalog
-description: Private PostgreSQL, authorization store and Iceberg catalog
+description: Iceberg REST catalog (Lakekeeper) and its backed-up PostgreSQL database
 type: application
 version: 0.1.0
 dependencies:

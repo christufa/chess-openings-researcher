@@ -24,7 +24,7 @@ locals {
   tags = { application = "openings-researcher", environment = "production", component = "state", managed_by = "terraform" }
 }
 resource "azurerm_resource_group" "state" {
-  name     = "rg-openings-prod-state"
+  name     = "rg-openings-tfstate"
   location = var.location
   tags     = local.tags
   lifecycle { prevent_destroy = true }

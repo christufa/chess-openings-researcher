@@ -63,7 +63,7 @@ spec:
             from pathlib import Path
             from openings_research.batch import plan
             names = json.loads(sys.argv[1])
-            batch = plan(names, 0, 'argo')
+            batch = plan(names)
             agent = sys.argv[2]
             if agent not in ('fixture', 'openai'): raise ValueError('Unknown agent')
             if agent == 'fixture' and names != ['__smoke_italian__']: raise ValueError('Invalid fixture scope')
