@@ -186,7 +186,7 @@ resource "cloudflare_dns_record" "chess_engines" {
   content = "${cloudflare_zero_trust_tunnel_cloudflared.aks.id}.cfargotunnel.com"
   proxied = true
   ttl     = 1
-  comment = "chess-engines API via Cloudflare Tunnel + Access service tokens (openings-researcher infra/gitops/edge.tf)"
+  comment = "chess-engines API via Cloudflare Tunnel + Access service tokens (infra/gitops/edge.tf)"
 }
 
 # The tunnel token for cloudflared, straight into the cluster (never in a file or git).
