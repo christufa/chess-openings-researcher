@@ -2,7 +2,7 @@ import copy
 import json
 from pathlib import Path
 
-from openings_research.azure_preflight import assess, requirements
+from openings_research.azure_preflight import assess, default_capacity, requirements
 
 CAPACITY = json.loads((Path(__file__).resolve().parents[1] / "infra/capacity.json").read_text())
 
@@ -19,8 +19,8 @@ def fixtures():
 
 def test_requirements_split_on_demand_spot_and_regional_cores():
     assert requirements(CAPACITY) == {
-        "standardDASv5Family": {"startup": 4, "maximum": 8, "maximum_with_surge": 12},
-        "cores": {"startup": 4, "maximum": 8, "maximum_with_surge": 12},
+        "standardDASv5Family": {"startup": 4, "maximum": 4, "maximum_with_surge": 8},
+        "cores": {"startup": 4, "maximum": 4, "maximum_with_surge": 8},
         "lowPriorityCores": {"startup": 0, "maximum": 4, "maximum_with_surge": 8},
     }
     usage, skus = fixtures()
@@ -41,6 +41,17 @@ def test_family_approval_does_not_bypass_regional_quota():
     report = assess(CAPACITY, usage, skus, "eastus2")
     assert not report["startup_capacity_ready"]
     assert report["quotas"]["cores"]["startup_target_limit"] == 18
+
+
+def test_one_system_node_fits_the_shared_family_quota():
+    usage, skus = fixtures()
+    usage[0].update(currentValue="8", limit="16")  # lichess-delta-kube already uses 8
+    assert assess(CAPACITY, usage, skus, "eastus2")["full_capacity_ready"]
+
+
+def test_default_capacity_is_found_from_any_folder(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert default_capacity().resolve() == (Path(__file__).resolve().parents[1] / "infra/capacity.json")
 
 
 def test_location_restriction_blocks_even_with_sufficient_quota():

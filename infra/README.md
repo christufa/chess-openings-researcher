@@ -9,7 +9,7 @@ published to the internet: there is no ingress, gateway or DNS record.
 |---|---|---|
 | `bootstrap` | State account (operator IP only, versioned, locked) and the monthly budget | local, then migrated |
 | `platform` | Resource group, VNet + AKS subnet (service endpoints), research storage account with `research`, `catalog-backups` and `workflow-logs` containers | `platform.tfstate` |
-| `compute` | AKS (Free tier, system pool 1–2, spot `batch` pool 0–1), ACR, Key Vault, workload identities, GitHub OIDC push identity | `compute.tfstate` |
+| `compute` | AKS (Free tier, system pool of 1 node until the quota increase, then 1–2; spot `batch` pool 0–1), ACR, Key Vault, workload identities, GitHub OIDC push identity | `compute.tfstate` |
 | `gitops` | Argo CD, the root app-of-apps (`deploy/apps`) and the cluster facts | `gitops.tfstate` |
 
 Node pools and quotas come from [`capacity.json`](capacity.json), which both
