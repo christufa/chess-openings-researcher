@@ -50,3 +50,5 @@ backend.local.tf
 infra/state.tfbackend
 deploy/**/charts/
 .cache/
+# The UI build lands in the package only inside the image (docker/Dockerfile.api).
+src/openings_research/web/assets/

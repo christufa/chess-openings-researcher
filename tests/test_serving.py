@@ -80,8 +80,7 @@ def test_comparison(client):
 
 
 def test_static_explorer(client):
-    assert "Openings Research" in client.get("/").text
-    assert client.get("/app.js").status_code == 200
+    assert "Openings Research" in client.get("/").text  # the placeholder, or the built UI in the image
     assert client.get("/api/openapi.json").status_code == 200
 
 

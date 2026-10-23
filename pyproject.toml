@@ -26,7 +26,7 @@ api = [
 ]
 
 [tool.setuptools.package-data]
-openings_research = ["web/*.html", "web/*.css", "web/*.js"]
+openings_research = ["web/*.html", "web/*.svg", "web/assets/*"]  # the built UI (web/)
 
 [tool.setuptools.packages.find]
 where = ["src"]

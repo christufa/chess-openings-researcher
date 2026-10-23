@@ -1,5 +1,16 @@
-# Read-only explorer API: FastAPI over Iceberg via pyiceberg + DuckDB. Base pinned by
-# digest (Dependabot bumps it); Python dependencies pinned in pyproject.toml.
+# Read-only explorer API: FastAPI over Iceberg via pyiceberg + DuckDB, serving the tree UI.
+# Base images pinned by digest (Dependabot bumps them); dependencies pinned in pyproject.toml
+# and web/package-lock.json.
+
+# ---- the UI (web/): typecheck, unit tests and the production build ----
+FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run typecheck && npm test && npx vite build
+
+# ---- the API, with the built UI in the package ----
 FROM python:3.13-slim@sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39
 # OS security updates on top of the pinned base (CI fails on fixable critical CVEs).
 RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
@@ -7,6 +18,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
+COPY --from=web /web/dist/ ./src/openings_research/web/
 RUN pip install --no-cache-dir '.[api]'
 USER 10001
 EXPOSE 8000
