@@ -46,3 +46,42 @@ variable "argocd_apps_chart_version" {
   type        = string
   default     = "2.0.6"
 }
+
+# ---- Entry from the internet (Cloudflare Tunnel + Access, edge.tf) ----
+
+variable "domain" {
+  description = "Cloudflare zone the hostnames live in"
+  type        = string
+  default     = "generops.dev"
+}
+
+variable "hostname_prefix" {
+  description = "<prefix> is the public explorer; <prefix>-cd and <prefix>-flows are private"
+  type        = string
+  default     = "chess-openings"
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID (zone Overview page, right sidebar)"
+  type        = string
+}
+
+variable "cloudflare_zone_id" {
+  description = "Zone ID of var.domain (zone Overview page, right sidebar)"
+  type        = string
+}
+
+variable "cloudflare_team_name" {
+  description = "Zero Trust team name: <team>.cloudflareaccess.com"
+  type        = string
+}
+
+variable "access_allowed_emails" {
+  description = "Who may sign in to the private hostnames: your Entra sign-in email"
+  type        = list(string)
+}
+
+variable "access_identity_provider_id" {
+  description = "Cloudflare Access identity provider to sign in with (lichess-delta-kube's Microsoft Entra ID provider)"
+  type        = string
+}

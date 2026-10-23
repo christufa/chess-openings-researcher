@@ -4,9 +4,9 @@
 # with the preflight before raising max_count in infra/capacity.json. Research runs on a spot pool that scales from zero, one
 # serialized batch at a time. Idle cost is one node, its disk and the load balancer.
 #
-# Nothing is published: no ingress, gateway or DNS record. The API server is public
-# but answers only Entra-authenticated callers from the IP ranges you set by hand
-# in Azure (infra/README.md); the explorer is reached with kubectl port-forward.
+# No ingress, gateway or load balancer for workloads: the only way in is the outbound
+# Cloudflare Tunnel (gitops/edge.tf). The API server is public but answers only
+# Entra-authenticated callers from the IP ranges you set by hand in Azure (infra/README.md).
 resource "azurerm_user_assigned_identity" "aks" {
   name                = "id-${var.project}-aks"
   resource_group_name = azurerm_resource_group.compute.name

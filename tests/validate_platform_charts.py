@@ -53,9 +53,10 @@ def check_gitops(platform):
         allowed = {d["namespace"] for d in project["spec"]["destinations"]}
         assert namespace in allowed, (obj["metadata"]["name"], namespace)
     assert projects["platform-security"]["spec"]["clusterResourceWhitelist"] == []
-    rendered = yaml.safe_dump(apps)
-    for forbidden in ("ingress", "LoadBalancer", "cloudflared"):
-        assert forbidden not in rendered, f"nothing may be published: found {forbidden}"
+    # The only way in is the outbound Cloudflare Tunnel: no Ingress, Gateway or LoadBalancer.
+    rendered = yaml.safe_dump(apps + load("deploy/cloudflared"))
+    for forbidden in ("kind: Ingress", "kind: Gateway", "LoadBalancer"):
+        assert forbidden not in rendered, f"no inbound path besides the tunnel: found {forbidden}"
 
     # cert-manager injects caBundle into its webhooks; Argo CD must ignore it, not undo it.
     certs = next(obj for obj in apps if obj["metadata"]["name"] == "cert-manager")["spec"]
@@ -75,6 +76,11 @@ def check_gitops(platform):
     covered = {obj["metadata"]["namespace"] for obj in policies}
     assert covered <= secured
     assert secured - covered == {"openings-catalog"}  # its policies ship with the catalog chart
+    # In the research namespace cloudflared may reach only the explorer API.
+    tunnel = [obj for obj in policies if obj["metadata"]["name"] == "allow-cloudflared"]
+    research_allow = next(obj for obj in tunnel if obj["metadata"]["namespace"] == "openings-research")
+    assert research_allow["spec"]["endpointSelector"] == {"matchLabels": {"app": "openings-api"}}
+    assert {obj["metadata"]["namespace"] for obj in tunnel} == {"openings-research", "argocd", "argo"}
     egress = next(obj for obj in policies if obj["metadata"]["name"] == "limited-egress")
     world = [rule for rule in egress["spec"]["egress"] if "world" in rule.get("toEntities", [])]
     assert [p["port"] for rule in world for ports in rule["toPorts"] for p in ports["ports"]] == ["443"]

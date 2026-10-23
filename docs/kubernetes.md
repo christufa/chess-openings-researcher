@@ -65,8 +65,9 @@ The explorer pages through openings and records, shows the latest 100 runs,
 shows source excerpts, and compares two completed runs for the same opening.
 Comparison is exact record identity (including claim category/text), not semantic
 equivalence. The API caps pages at 100 and comparisons at 999 unique records of
-each kind. It never exposes raw model responses or accepts arbitrary SQL, and it
-is never published: port-forward is the only way in.
+each kind. It never exposes raw model responses or accepts arbitrary SQL. It is public at
+https://chess-openings.generops.dev through the Cloudflare Tunnel, and rate-limits `/api/`
+per client IP (60-request burst, 5 per second; `OPENINGS_RATE_LIMIT_*`).
 
 For the major-opening batch after the fixture succeeds:
 

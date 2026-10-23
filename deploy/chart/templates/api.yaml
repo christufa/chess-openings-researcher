@@ -60,7 +60,8 @@ spec:
   selector: {app: openings-api}
   ports: [{port: 80, targetPort: http}]
 ---
-# No ingress route is installed. Start with an authenticated kubectl port-forward.
+# No ingress route: the public path is the Cloudflare Tunnel, admitted by the
+# allow-cloudflared policy in deploy/network-policies/cloudflared.yaml.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

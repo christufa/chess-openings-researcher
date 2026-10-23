@@ -19,6 +19,7 @@ spec:
     - { server: https://kubernetes.default.svc, namespace: argo }
     - { server: https://kubernetes.default.svc, namespace: cert-manager }
     - { server: https://kubernetes.default.svc, namespace: cnpg-system }
+    - { server: https://kubernetes.default.svc, namespace: cloudflared }
     - { server: https://kubernetes.default.svc, namespace: external-secrets }
     - { server: https://kubernetes.default.svc, namespace: openings-catalog }
     - { server: https://kubernetes.default.svc, namespace: openings-research }
