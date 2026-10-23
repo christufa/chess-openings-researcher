@@ -128,6 +128,36 @@ class ResearchReader:
             (offset, limit),
         )
 
+    def book_lines(self, page=1000):
+        """Every line of each opening's latest completed run, for the book tree (paged)."""
+        rows, offset = [], 0
+        while True:
+            batch = self.db.query(
+                f"""
+                WITH latest AS (
+                  SELECT run_id, opening FROM (
+                    SELECT run_id, opening,
+                      row_number() OVER (PARTITION BY opening_id ORDER BY completed_at DESC, run_id DESC) AS rn
+                    FROM {self.table("research_runs")} WHERE status = 'completed'
+                  ) ranked WHERE rn = 1
+                )
+                SELECT latest.opening, r.name, l.moves_uci, p.normalized_fen AS start_fen
+                FROM latest
+                JOIN {self.table("opening_lines")} r ON r.run_id = latest.run_id
+                JOIN {self.table("lines")} l ON l.line_id = r.line_id
+                JOIN {self.table("positions")} p ON p.position_id = l.start_position_id
+                ORDER BY latest.opening, r.record_id OFFSET ? LIMIT ?""",
+                (offset, page),
+            )
+            for row in batch:
+                if isinstance(row["moves_uci"], str):
+                    row["moves_uci"] = json.loads(row["moves_uci"])
+            # Authored smoke fixtures (named "__...") never belong in the public book.
+            rows.extend(row for row in batch if not row["opening"].startswith("__"))
+            if len(batch) < page:
+                return rows
+            offset += page
+
     def runs(self, opening_id, limit=50):
         return self.db.query(
             f"""SELECT run_id, opening_id, opening, status, created_at, completed_at
