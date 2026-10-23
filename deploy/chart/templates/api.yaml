@@ -24,34 +24,33 @@ spec:
           ports: [{containerPort: 8000, name: http}]
           envFrom: [{configMapRef: {name: openings-config}}]
           resources:
-            requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: "1", memory: 512Mi}
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi} # whole small tables are held in memory
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           livenessProbe: {httpGet: {path: /healthz, port: http}}
-          readinessProbe:
+          readinessProbe: # the catalog is reachable and the research namespace readable
             httpGet: {path: /readyz, port: http}
-            timeoutSeconds: 35
-            periodSeconds: 60
-          {{- if .Values.trinoHost }}
+            timeoutSeconds: 10
+            periodSeconds: 30
           volumeMounts:
-            - {name: trino-token, mountPath: /var/run/research/trino, readOnly: true}
-            - {name: ca, mountPath: /var/run/research/ca, readOnly: true}
-          {{- end }}
-      {{- if .Values.trinoHost }}
+            - {name: catalog-token, mountPath: /var/run/research/catalog, readOnly: true}
+            - {name: scratch, mountPath: /tmp}
       volumes:
-        - name: trino-token
+        # The API has no storage role: it reads with the table-scoped SAS tokens Lakekeeper
+        # vends. With allowall authorization those are not read-only; the API code only
+        # reads (no write path exists). The token is re-read whenever the kubelet rotates it.
+        - name: catalog-token
           projected:
             sources:
               - serviceAccountToken:
-                  audience: {{ .Values.trinoTokenAudience | quote }}
+                  audience: {{ .Values.catalogTokenAudience | quote }}
                   expirationSeconds: 3600
                   path: token
-        - name: ca
-          configMap: {name: {{ .Values.caConfigMap | quote }}}
-      {{- end }}
+        - name: scratch
+          emptyDir: {sizeLimit: 256Mi}
 ---
 apiVersion: v1
 kind: Service

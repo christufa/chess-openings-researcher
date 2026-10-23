@@ -103,6 +103,9 @@ def main():
     assert api["spec"]["template"]["metadata"]["labels"]["openings.generops.dev/role"] == "api"
     for container in api["spec"]["template"]["spec"]["containers"]:
         assert not any("secretRef" in ref for ref in container.get("envFrom", []))
+    tokens = [v["projected"]["sources"][0]["serviceAccountToken"] for v in api["spec"]["template"]["spec"]["volumes"]
+              if "projected" in v]
+    assert [t["audience"] for t in tokens] == ["lakekeeper"]  # catalog only; no other credential
     names = {obj["metadata"]["name"] for obj in research}
     assert {"openings-batch", "catalog-bootstrap", "artifact-repositories"} <= names
     worker = next(obj for obj in research if obj["kind"] == "ServiceAccount" and obj["metadata"]["name"] == "openings-worker")

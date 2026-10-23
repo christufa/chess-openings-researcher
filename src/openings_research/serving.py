@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+import threading
 from pathlib import Path
 
 import chess
@@ -13,39 +15,94 @@ class StoreUnavailable(Exception):
     pass
 
 
-class TrinoReader:
-    def query(self, sql, parameters=()):
-        from trino.auth import JWTAuthentication
-        from trino.dbapi import connect
+class ArrowSQL:
+    """Runs the reader's SQL in a throwaway in-memory DuckDB over Arrow tables.
 
-        connection = None
+    `load(name)` returns one table as Arrow. Each `<namespace>.<table>` in the SQL is
+    swapped for that table registered under a local name, so only tables a query names
+    are loaded, and nothing can be written back.
+    """
+
+    def __init__(self, load, namespace="research.openings_research"):
+        self.load = load
+        self.pattern = re.compile(re.escape(namespace) + r"\.(\w+)\b")
+
+    def query(self, sql, parameters=()):
+        import duckdb
+
+        connection = duckdb.connect(":memory:")
         try:
-            token = Path(os.environ["OPENINGS_TRINO_TOKEN_FILE"]).read_text().strip()
-            connection = connect(
-                host=os.environ["OPENINGS_TRINO_HOST"],
-                port=int(os.getenv("OPENINGS_TRINO_PORT", "8443")),
-                user=os.getenv("OPENINGS_TRINO_USER", "openings-api"),
-                http_scheme="https",
-                auth=JWTAuthentication(token),
-                verify=os.environ["OPENINGS_TRINO_CA_FILE"],
-                request_timeout=30,
-                max_attempts=2,
-                source="openings-research-api",
-                session_properties={"query_max_run_time": "30s"},
-            )
-            cursor = connection.cursor()
-            cursor.execute(sql, list(parameters)) if parameters else cursor.execute(sql)
+            for name in sorted(set(self.pattern.findall(sql))):
+                connection.register(f"iceberg_{name}", self.load(name))
+            cursor = connection.execute(self.pattern.sub(r"iceberg_\1", sql), list(parameters))
             rows = cursor.fetchmany(1001)
             if len(rows) > 1000:
-                cursor.cancel()
                 raise ValueError("Query exceeded bounded response size")
             names = [item[0] for item in cursor.description]
             return [dict(zip(names, row, strict=True)) for row in rows]
-        except Exception:
-            raise StoreUnavailable("Research store is unavailable") from None
         finally:
-            if connection:
-                connection.close()
+            connection.close()
+
+
+class IcebergReader:
+    """Reads completed research straight from the Iceberg REST catalog (no query engine).
+
+    Signs in with the pod's projected catalog token, re-read whenever it rotates, and asks
+    for vended credentials, so the API holds no storage role of its own. Tables are small:
+    each is scanned whole and cached until its snapshot changes.
+    """
+
+    def __init__(self, namespace="research.openings_research", catalog=None):
+        self.namespace = namespace
+        self.schema = namespace.split(".")[1]
+        self._fixed = catalog  # tests pass a local catalog; production builds a REST one
+        self._rest, self._token = None, None
+        self._snapshots = {}
+        self._lock = threading.Lock()
+        self.sql = ArrowSQL(self._table, namespace)
+
+    def catalog(self):
+        if self._fixed is not None:
+            return self._fixed
+        from pyiceberg.catalog.rest import RestCatalog
+
+        token = Path(os.environ["OPENINGS_CATALOG_TOKEN_FILE"]).read_text().strip()
+        if self._rest is None or token != self._token:
+            self._rest = RestCatalog(
+                "research",
+                uri=os.environ["OPENINGS_CATALOG_URI"],
+                warehouse=os.environ["OPENINGS_WAREHOUSE"],
+                token=token,
+                # Lakekeeper vends a per-account SAS token; the fsspec ADLS backend uses it.
+                **{"py-io-impl": "pyiceberg.io.fsspec.FsspecFileIO"},
+            )
+            self._token = token
+        return self._rest
+
+    def _table(self, name):
+        table = self.catalog().load_table((self.schema, name))
+        snapshot = table.current_snapshot()
+        snapshot_id = snapshot.snapshot_id if snapshot else None
+        cached = self._snapshots.get(name)
+        if cached and cached[0] == snapshot_id:
+            return cached[1]
+        data = table.scan().to_arrow()
+        self._snapshots[name] = (snapshot_id, data)
+        return data
+
+    def ping(self):
+        with self._lock:
+            try:
+                self.catalog().list_tables(self.schema)
+            except Exception:
+                raise StoreUnavailable("Research store is unavailable") from None
+
+    def query(self, sql, parameters=()):
+        with self._lock:
+            try:
+                return self.sql.query(sql, parameters)
+            except Exception:
+                raise StoreUnavailable("Research store is unavailable") from None
 
 
 class ResearchReader:
