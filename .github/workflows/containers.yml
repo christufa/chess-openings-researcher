@@ -20,6 +20,14 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt 'playwright==1.64.0'
       - name: Validate charts, GitOps apps and network policies
         run: python tests/validate_platform_charts.py
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Build the UI into the package
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix web run build
+          cp -r web/dist/. src/openings_research/web/
       - name: Browser smoke with authored fixture
         run: |
           python -m playwright install --with-deps chromium

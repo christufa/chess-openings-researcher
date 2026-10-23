@@ -10,3 +10,5 @@ build
 data
 test_data
 *.ipynb
+web/node_modules
+web/dist
