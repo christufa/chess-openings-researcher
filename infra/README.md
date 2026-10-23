@@ -71,6 +71,21 @@ Then, from `infra/`, with your `az login` session:
    Vault (your IP added first). Keep a copy of the encryption key outside Azure:
    without it, a restored catalog database cannot decrypt its stored settings.
 
+## GitHub secrets for the images workflow
+
+Set these repository secrets from the `compute` outputs. They are identifiers, not
+credentials, but secrets are masked in this public repository's logs:
+
+| Secret | Value |
+|---|---|
+| `AZURE_CLIENT_ID` | `terraform -chdir=compute output -raw ci_client_id` |
+| `AZURE_TENANT_ID` | your tenant ID |
+| `ACR_LOGIN_SERVER` | `terraform -chdir=compute output -raw acr_login_server` |
+
+The CI identity trusts `repo:christufa/chess-openings-researcher:ref:refs/heads/main`. If
+the repository uses GitHub's ID-based OIDC subject claims, change the subject in
+`compute/registry.tf` to match the subject the workflow prints.
+
 ## Recovery
 
 - Research data: ZRS, 30-day soft delete, a delete lock and `prevent_destroy`.

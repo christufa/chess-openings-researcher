@@ -25,6 +25,19 @@ facts**: annotations on Argo CD's in-cluster cluster Secret, written by
 | 4 | `research`, which exists only after the images workflow has written `openings.yaml` to the `deploy-state` branch |
 | 5 | `network-policies` |
 
+## Rolling out new builds
+
+Every push to `main` runs `.github/workflows/images.yml`: build both images, smoke test,
+Trivy (fail on fixable criticals), push to the registry with SBOM and provenance, sign
+with cosign (keyless, identity `images.yml@refs/heads/main`) and verify the signature.
+The `release` job then commits both digests and the commit to `deploy-state/openings.yaml`;
+the `research` ApplicationSet reads that file, so Argo CD rolls the build out. Both
+images or neither: if one fails, `deploy-state` keeps the last good pair.
+
+To roll back, `git revert` the commit on `deploy-state`. Admission in the cluster checks
+that every research image is a digest from this registry, which only CI and you can push
+to; signatures are verified at publish time, not again at admission.
+
 ## Nothing is published
 
 No Ingress, Gateway, LoadBalancer Service or tunnel. Reach the UIs with port-forward,

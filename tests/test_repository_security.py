@@ -43,3 +43,40 @@ def test_public_workflows_are_pinned_and_do_not_execute_privileged_prs():
             for step in job.get("steps", []):
                 if "uses" in step:
                     assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", step["uses"])
+
+
+def test_images_publish_only_from_main_after_scan_then_sign():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/images.yml").read_text())
+    events = workflow.get("on", workflow.get(True))
+    assert set(events) == {"push", "workflow_dispatch"}
+    assert events["push"] == {"branches": ["main"]}
+    image, release = workflow["jobs"]["image"], workflow["jobs"]["release"]
+    assert image["if"] == "github.ref == 'refs/heads/main'"
+    assert "refs/heads/main" in release["if"]
+    assert image["permissions"] == {"contents": "read", "id-token": "write"}
+    assert release["permissions"] == {"contents": "write"}  # only the deploy-state commit writes
+    assert all("uses" in step and "checkout" in step["uses"] or "run" in step for step in release["steps"])
+    names = [step.get("name", step.get("uses", "")) for step in image["steps"]]
+    order = [names.index(n) for n in (
+        "Smoke test", "Fail on fixable critical vulnerabilities", "Push with SBOM and provenance",
+        "Sign and verify (cosign keyless, identity = this workflow on main)")]
+    assert order == sorted(order)
+    push = next(step for step in image["steps"] if step.get("name") == "Push with SBOM and provenance")
+    assert push["with"]["sbom"] is True and push["with"]["provenance"] == "mode=max"
+
+
+def test_pull_requests_scan_both_images():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/containers.yml").read_text())
+    steps = [step.get("with", {}).get("image-ref") for step in workflow["jobs"]["containers"]["steps"]]
+    assert {"openings-worker:test", "openings-api:test"} <= set(steps)
+
+
+def test_base_images_and_downloads_are_pinned():
+    for path in (ROOT / "docker").glob("Dockerfile.*"):
+        text = path.read_text()
+        for ref in re.findall(r"^(?:FROM|ARG SPARK_IMAGE=)\s*(\S+)", text, re.MULTILINE):
+            if ref.startswith("${"):
+                continue
+            assert re.search(r"@sha256:[0-9a-f]{64}$", ref), f"{path.name}: {ref} is not digest-pinned"
+        for add in re.findall(r"^ADD .*$", text, re.MULTILINE):
+            assert re.match(r"ADD --checksum=sha256:[0-9a-f]{64} ", add), f"{path.name}: unchecked download"
