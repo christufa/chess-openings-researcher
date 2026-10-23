@@ -1,5 +1,0 @@
-subscription_id    = "00000000-0000-0000-0000-000000000000"
-tenant_id          = "00000000-0000-0000-0000-000000000000"
-operator_object_id = "00000000-0000-0000-0000-000000000000"
-state_account_name = "openingsstateexample"
-# Set operator_ipv4 through TF_VAR_operator_ipv4; never allow 0.0.0.0/0.

@@ -8,7 +8,6 @@
     "aquasecurity/trivy-action@*",
     "aquasecurity/setup-trivy@*",
     "sigstore/cosign-installer@*",
-    "hashicorp/setup-terraform@*",
-    "databricks/setup-cli@*"
+    "hashicorp/setup-terraform@*"
   ]
 }

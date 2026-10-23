@@ -41,8 +41,12 @@ build/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+*.tfvars.json
 *.auto.tfvars
 *.auto.tfvars.json
 crash.log
 backend.local.tf
+infra/state.tfbackend
 deploy/**/charts/
+.cache/

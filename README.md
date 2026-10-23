@@ -1,34 +1,26 @@
 # Openings Researcher
 
-Production direction: a dedicated Azure Kubernetes platform with Iceberg,
-public encyclopedia browsing and private research operations. See the
-[production foundation and remaining deployment work](docs/production.md) and
-[encyclopedia research contract](docs/research-product.md). Infrastructure is
-defined in Terraform; no production cluster has been deployed yet.
-The [GitOps runbook](docs/gitops.md) covers state bootstrap, signed image
-publication and PR-based promotion of immutable release manifests.
+A replayable opening-research pipeline that collects web sources, extracts and
+validates chess claims, and stores the results in Iceberg on a lean, private Azure
+Kubernetes platform. The purpose is data collection: nothing is published to the
+internet, and the read-only explorer is reached with `kubectl port-forward`.
 
-**New: Kubernetes/Iceberg runtime and research explorer.** The same pipeline can
-now run in a bounded Argo batch, publish to a dedicated Iceberg warehouse, and
-serve completed research through a read-only API and browser interface. See
-[Kubernetes setup and migration boundaries](docs/kubernetes.md). This runtime is
-locally tested; connecting it to a real catalog/cluster requires the documented
-research-specific infrastructure grants. Existing Delta data is not auto-migrated.
-
-A replayable opening-research pipeline deployed to Databricks from GitHub.
-All Delta tables live in **`main.openings_research`** (catalog and schema are configurable).
 Agents produce candidates; the pipeline owns source snapshots, chess validation,
 publication, and run history. Game ingestion remains outside this application's scope.
 
 ```text
 Tavily or saved sources -> collect -> extract -> validate -> review -> publish
                                       |            |         |          |
-                              replaceable agent  checks   support   Delta views
+                              replaceable agent  checks   support   Iceberg tables
 ```
+
+- [Infrastructure](infra/README.md): Terraform stacks, privacy boundaries, apply order.
+- [Kubernetes runtime](docs/kubernetes.md): Argo batch, Iceberg catalog, explorer.
+- [Research contract](docs/research-product.md).
 
 ## What works
 
-- Five serverless wheel tasks, with retries and durable stage markers.
+- One Argo-scheduled worker per opening runs the five stages, with retries and durable stage markers.
 - Tavily searches across three topics, deduplicates URLs, and extracts up to six
   documents. Raw responses (including extraction failures) are retained. The agent
   sees up to 10,000 characters per document; the saved source version is that exact
@@ -59,14 +51,12 @@ Tavily or saved sources -> collect -> extract -> validate -> review -> publish
 | `validation.py` | Deterministic chess and evidence checks |
 | `review.py`, `taxonomy.py` | Source-support review and explicit claim categories |
 | `coverage.py` | Topic/side presence and prioritized research gaps |
-| `schema.py`, `storage.py` | Explicit Delta schemas, merges and views |
-| `cli.py` | Installed Databricks wheel entry points |
-| `resources/research_job.yml` | Five-task serverless job |
-| `.github/workflows/databricks.yml` | Public-repository CI and develop deployment |
+| `schema.py`, `storage.py`, `iceberg.py` | Explicit schemas and idempotent Iceberg merges |
+| `worker.py`, `api.py`, `serving.py` | Kubernetes worker entry point and read-only explorer |
+| `batch.py` | Validates the bounded opening list for an Argo batch |
+| `infra/`, `deploy/` | Terraform stacks and Helm charts |
+| `.github/workflows/` | Public-repository CI: tests, Terraform, containers, security |
 | `tests/` | Identity, evidence, replay, failure recovery and deployment checks |
-
-The original root-level scripts and notebook remain as the legacy report tool;
-they are not imported by the deployed wheel. See [legacy usage](docs/legacy-reports.md).
 
 ## Tables and publication
 
@@ -100,18 +90,18 @@ candidate and record the reviewer's rationale separately.
 
 ```sql
 SELECT topic, side, priority, reason, query
-FROM main.openings_research.current_research_gaps
+FROM research.openings_research.current_research_gaps
 ORDER BY priority, topic, side;
 
-SELECT report_json FROM main.openings_research.current_coverage;
+SELECT report_json FROM research.openings_research.current_coverage;
 ```
 
 Coverage measures topic presence, not complete opening theory. It reports branch
 completeness and source independence as unassessed. Suggested searches are saved
 for follow-up; they do not automatically start additional paid research.
 
-Publication writes all entity tables before marking the run completed. Delta
-transactions are table-scoped; the completed-run view is the publication boundary.
+Publication writes all entity tables before marking the run completed. Iceberg
+commits are table-scoped; the completed-run view is the publication boundary.
 Direct reads of base tables can include partial/unpublished records. An interrupted
 publish can be repaired without duplicate keys. No valid candidates means a failed
 run, leaving the previous completed run current. Some rejected candidates do not
@@ -122,131 +112,6 @@ block publication. Coverage is persisted before the completed marker as well.
 Only this job should write these tables. It allows one concurrent run. Do not
 deploy another writer into the same schema. Schema changes require explicit
 migrations; `CREATE TABLE IF NOT EXISTS` does not migrate existing tables.
-
-## Databricks setup
-
-Requires Unity Catalog, serverless jobs, outbound access to PyPI/Tavily/OpenAI,
-and a deployment/job identity with schema, volume and table privileges.
-
-1. Authenticate: `databricks auth login --host https://YOUR_WORKSPACE`.
-2. Bootstrap the artifact volume before deployment (wheel upload precedes tasks):
-
-   ```sh
-   databricks schemas create openings_research main
-   databricks volumes create main openings_research artifacts MANAGED
-   ```
-
-3. Store API keys using the interactive prompts; never put them in Git or job parameters:
-
-   ```sh
-   databricks secrets create-scope openings_research
-   databricks secrets put-secret openings_research tavily-api-key
-   databricks secrets put-secret openings_research openai-api-key
-   ```
-
-4. Install/build and deploy:
-
-   ```sh
-   python -m pip install -r requirements-dev.txt
-   databricks bundle validate -t dev
-   databricks bundle deploy -t dev
-   ```
-
-The bundle uploads a versioned wheel under the schema's `artifacts` volume,
-using a dedicated artifact location. There is no automatic research schedule.
-Deploying creates/updates the job; it does not start paid API research.
-
-## Run and rerun
-
-Credential-free smoke run (writes a separate `__smoke_italian__` opening):
-
-```sh
-databricks bundle run -t dev openings_research --params 'agent=fixture,opening=__smoke_italian__'
-```
-
-Collect new web sources and research an opening:
-
-```sh
-databricks bundle run -t dev openings_research --params 'opening=Italian Game'
-```
-
-Use the original Databricks job run ID to extract again from saved sources:
-
-```sh
-databricks bundle run -t dev openings_research --params 'opening=Italian Game,mode=reextract,source_run_id=123456,model=gpt-4.1-mini,review_model=gpt-4.1-mini'
-```
-
-Choose a different supported model to compare it; a new run ID preserves both
-results. Source reuse requires the same requested opening identity and a completed
-collection stage. It does not require the original extraction to have succeeded.
-Published claims and coverage gaps, when available from that source run, are
-passed as research hints, never as substitute source evidence.
-Use Databricks **Repair run** for unchanged failed tasks. Changing agent/model,
-prompt or code configuration requires a new run instead of repairing the old one.
-
-Requests are cached after their responses are committed. An interruption between
-a remote API response and the cache write can repeat that paid request. Collection
-is bounded to three searches and one batch extract per fresh run; extraction uses
-one model call and review uses another, each capped at 8,000 output tokens
-(provider/task retries can add calls). Review batches are limited to 100 candidates.
-There is no dollar-budget enforcement yet. Token usage is recorded when returned.
-
-## Bounded batches
-
-The supplied `batches/major-openings-20.json` researches 20 opening families once
-each. Submit to the existing deployed job with the authenticated Databricks CLI:
-
-```sh
-python -m openings_research.batch submit --job-id 123456789 --openings batches/major-openings-20.json --manifest .databricks/batch-20.json --profile main
-python -m openings_research.batch status --manifest .databricks/batch-20.json --profile main
-```
-
-Use `--cli /path/to/databricks` when the CLI is not on PATH. The local manifest is
-saved before submission and after each accepted run. To resume an interrupted
-submission, repeat `submit` with the same manifest, omitting `--job-id` and
-`--openings`. Saved idempotency tokens prevent duplicate job launches. Keep the
-manifest; a new manifest intentionally creates a new batch. Do not run concurrent
-submitters against the same manifest.
-
-Each request enables Databricks queueing; the job retains one concurrent run.
-The queue runs in Databricks after this command exits, with no local process or
-automatic research schedule needed. A failed opening does not block later queued
-runs; inspect status and repair failed runs separately. Avoid deploying new code
-while a batch is queued or running. Queue expiration and workspace limits can
-prevent later runs from starting; the status command reports their actual states.
-
-A 20-opening refresh requests 60 advanced searches, up to 120 extracted URLs,
-and normally 40 model calls, before retries. This is a request-count bound, not
-a dollar cap; provider charges and Databricks compute are additional. Results
-replace each opening's current snapshot only after successful publication.
-
-See the [Databricks run-now API](https://docs.databricks.com/api/jobs/v2/run-now)
-for queueing and idempotency behavior.
-
-## GitHub deployment
-
-PRs and pushes to `main`/`develop` run lint, tests, wheel builds and container checks.
-Databricks deployment is now manual: dispatch **Python CI and optional Databricks
-deploy** on `develop` with `deploy_databricks=true`. Its formerly configured
-workspace hostname did not resolve during the October 21, 2026 migration checks;
-restore/update that workspace configuration before using this option. Kubernetes
-images are currently built and tested, not automatically published or deployed.
-PR jobs cannot access deployment secrets. Actions are pinned to commit SHAs.
-
-Configure the `databricks-dev` GitHub environment, restricted to `develop`, with:
-
-- Variable `DATABRICKS_HOST` (workspace URL).
-- Variable `DATABRICKS_DEPLOY_USER` (the identity owning this dev deployment).
-- Secret `DATABRICKS_TOKEN` (dedicated deployment PAT; rotate before expiration).
-
-The workflow checks deployment identity, serializes deployments, uses bundle
-locking, and refuses deployment during an active job. Git commit SHA is recorded
-as `code_version`. Model API keys stay in Databricks Secrets, not GitHub.
-
-The initial workspace schema, artifact volume, API secret scope and GitHub
-environment were provisioned on October 3, 2026. The dedicated deployment token
-expires January 1, 2027 at 20:08 UTC; rotate the GitHub environment secret before
-then. No token values are stored in this repository.
 
 ## Position identity / games integration
 
@@ -304,8 +169,8 @@ python -m pytest -q
 python -m build --wheel
 ```
 
-Local tests use an in-memory store to exercise orchestration; a deployed fixture
-run verifies actual Spark/Delta execution, permissions and wheel installation.
+Local tests use an in-memory store to exercise orchestration; the worker image's
+smoke test runs real Iceberg merges, and a deployed fixture run verifies the catalog.
 Live Tavily/OpenAI research additionally requires working provider credentials.
 
 Explicit opening aliases/ECO imports, structured-dataset collectors, engine
@@ -314,7 +179,6 @@ run-comparison UI remain future work. The current release adds four new tables
 without altering existing table schemas. No claims of comprehensive opening
 coverage are made.
 
-References: [Databricks wheel bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/python-wheel),
-[Delta merge](https://docs.databricks.com/aws/en/delta/merge),
+References: [Iceberg Spark writes](https://iceberg.apache.org/docs/latest/spark-writes/),
 [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
 [Tavily Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract).

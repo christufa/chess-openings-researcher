@@ -1,13 +1,13 @@
 # Kubernetes / Iceberg deployment
 
-This is an additional runtime for the existing research pipeline. It does not
-migrate, delete, or read the Databricks data or the Lichess game tables. The
-Databricks bundle remains supported. All research tables live in one namespace,
-`openings_research`, in an explicitly configured Iceberg warehouse.
+This is the research pipeline's only runtime. It does not read the Lichess game
+tables. All research tables live in one namespace, `openings_research`, in an
+explicitly configured Iceberg warehouse. The earlier Databricks/Delta runtime has
+been removed; its workspace no longer resolves and its data is not migrated.
 
-Databricks deployment is opt-in via the workflow's `deploy_databricks` input.
-The old workspace hostname failed DNS resolution on October 21, 2026; this
-change does not restore it or assert that its existing data is accessible.
+The cluster itself is described in [infra/README.md](../infra/README.md). This
+document still describes Trino-based serving, which is being replaced by direct
+Iceberg reads from the API.
 
 ## Architecture
 

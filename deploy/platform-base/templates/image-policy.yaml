@@ -2,56 +2,8 @@
 {{- if not (regexMatch "^[a-z0-9]+\\.azurecr\\.io$" $registry) }}
 {{- fail "registry must be an Azure registry hostname" }}
 {{- end }}
-apiVersion: policies.kyverno.io/v1
-kind: ImageValidatingPolicy
-metadata:
-  name: openings-main-signatures
-spec:
-  validationActions: [Deny]
-  failurePolicy: Fail
-  webhookConfiguration:
-    timeoutSeconds: 30
-  evaluation:
-    background:
-      enabled: false
-  matchConstraints:
-    namespaceSelector:
-      matchExpressions:
-        - key: kubernetes.io/metadata.name
-          operator: In
-          values: [openings-research, openings-query]
-    resourceRules:
-      - apiGroups: ['']
-        apiVersions: [v1]
-        operations: [CREATE, UPDATE]
-        resources: [pods, pods/ephemeralcontainers]
-  images:
-    - name: applicationImages
-      expression: >-
-        (object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : []) + (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])).map(c, c.image)
-  matchImageReferences:
-    - glob: {{ printf "%s/openings-*" $registry | quote }}
-  credentials:
-    allowInsecureRegistry: false
-    providers: [azure]
-  validationConfigurations:
-    mutateDigest: false
-    verifyDigest: true
-    required: true
-  attestors:
-    - name: github
-      cosign:
-        keyless:
-          identities:
-            - issuer: https://token.actions.githubusercontent.com
-              subject: https://github.com/christufa/chess-openings-researcher/.github/workflows/publish.yml@refs/heads/main
-        ctlog:
-          url: https://rekor.sigstore.dev
-  validations:
-    - expression: >-
-        images.applicationImages.filter(image, image.startsWith('{{ $registry }}/openings-')).map(image, verifyImageSignatures(image, [attestors.github])).all(result, result > 0)
-      message: Research images must be signed by the protected main publishing workflow.
----
+# Built-in admission (no Kyverno): research pods may run only digest-pinned images
+# from this cluster's registry, plus the pinned Argo executor.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -72,8 +24,7 @@ spec:
     - expression: >-
         variables.containers.all(c,
           c.image.matches('^{{ $registry | replace "." "[.]" }}/openings-(api|worker)@sha256:[0-9a-f]{64}$') ||
-          (object.metadata.namespace == 'openings-research' && c.image == 'quay.io/argoproj/argoexec:v4.1.5@sha256:8275c3b970f399e9264ebd5f57e17f554e7494046d0f36f5f05ae2570a601de2') ||
-          (object.metadata.namespace == 'openings-query' && c.image == 'trinodb/trino@sha256:2704eb53935af5e582d63d6033e9bf99d20c325e9b0e30b1016ef59a4773979f'))
+          (object.metadata.namespace == 'openings-research' && c.image == 'quay.io/argoproj/argoexec:v4.1.5@sha256:8275c3b970f399e9264ebd5f57e17f554e7494046d0f36f5f05ae2570a601de2'))
       message: Only immutable application images and the explicitly pinned platform images are allowed.
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -88,4 +39,4 @@ spec:
       matchExpressions:
         - key: kubernetes.io/metadata.name
           operator: In
-          values: [openings-research, openings-query]
+          values: [openings-research]
