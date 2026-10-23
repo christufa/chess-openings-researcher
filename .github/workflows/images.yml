@@ -1,0 +1,163 @@
+# Publish the research images from main. Pull requests build, test and scan the same
+# images in containers.yml (the required "containers" check); this workflow does it again
+# on main and then publishes:
+#   build → smoke test → Trivy (fail on fixable criticals) → push to ACR with SBOM and SLSA
+#   provenance → cosign keyless signature, verified against this workflow's main identity
+#   → both digests committed to the deploy-state branch (openings.yaml), which
+#   deploy/apps/research.yaml reads, so Argo CD rolls the new build out.
+#
+# Azure sign-in uses GitHub OIDC: Azure trusts only this repository's main branch
+# (federated credential on id-openings-ci, which can do nothing but AcrPush). No passwords
+# or keys. Repository secrets hold only identifiers, kept as secrets so they are masked
+# in this public repository's logs: AZURE_CLIENT_ID (compute output ci_client_id),
+# AZURE_TENANT_ID and ACR_LOGIN_SERVER (compute output acr_login_server).
+name: images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-main
+  cancel-in-progress: false # never abandon a half-published release
+
+jobs:
+  image:
+    name: ${{ matrix.image }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04 # pinned: ubuntu-latest moves; bump deliberately
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write # Azure OIDC sign-in and cosign keyless signing
+    outputs:
+      openings-worker: ${{ steps.record.outputs.openings-worker }}
+      openings-api: ${{ steps.record.outputs.openings-api }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: openings-worker
+            dockerfile: docker/Dockerfile.worker
+            smoke: >-
+              docker run --rm --read-only --tmpfs /tmp:rw,exec,size=2g --memory 4g --cpus 2
+              --entrypoint /opt/spark/bin/spark-submit "$IMAGE"
+              --master 'local[2]' --driver-memory 2g /opt/research/smoke_iceberg.py
+          - image: openings-api
+            dockerfile: docker/Dockerfile.api
+            smoke: |
+              docker run -d --rm --read-only --tmpfs /tmp:rw,size=64m --cap-drop ALL --name api -p 127.0.0.1:8000:8000 "$IMAGE"
+              for i in $(seq 20); do curl -fsS 127.0.0.1:8000/healthz && break; sleep 1; done
+              curl -fsS 127.0.0.1:8000/api/openapi.json > /dev/null
+              test "$(curl -s -o /dev/null -w '%{http_code}' 127.0.0.1:8000/readyz)" = 503 # no catalog here
+              docker stop api
+    env:
+      IMAGE: ${{ matrix.image }}:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: CODE_VERSION=${{ github.sha }}
+          tags: ${{ env.IMAGE }}
+          load: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      - name: Smoke test
+        run: ${{ matrix.smoke }}
+
+      - name: Scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy.json
+          exit-code: "0"
+          trivyignores: .trivyignore
+
+      - name: Fail on fixable critical vulnerabilities
+        run: python3 .github/scripts/trivy_report.py trivy.json "${{ matrix.image }}"
+
+      - name: Azure sign-in (GitHub OIDC)
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: .github/scripts/azure_oidc_login.sh
+
+      - name: Registry sign-in
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+        run: az acr login --name "${ACR_LOGIN_SERVER%%.*}"
+
+      - name: Push with SBOM and provenance
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: CODE_VERSION=${{ github.sha }}
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:main
+          push: true
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign and verify (cosign keyless, identity = this workflow on main)
+        env:
+          REF: ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
+          IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/images.yml@refs/heads/main
+        run: |
+          cosign sign --yes "$REF"
+          cosign verify "$REF" --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ matrix.image }}"
+            echo "- tags: \`${{ github.sha }}\`, \`main\`"
+            echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+            echo "- signed by: \`images.yml@refs/heads/main\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the signed digest for the release job
+        id: record
+        run: echo "${{ matrix.image }}=${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  # Commit both digests to deploy-state so Argo CD rolls them out together. Its own job so
+  # only checkout runs with write access. Both images or neither: the worker and API must
+  # come from the same commit. deploy-state is not main, so main's ruleset still holds,
+  # and GITHUB_TOKEN pushes don't start workflows.
+  release:
+    name: release to deploy-state
+    needs: image
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push to deploy-state
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # history, to refuse moving deploy-state back to an older commit
+          filter: blob:none
+      - name: Commit digests to deploy-state
+        env:
+          WORKER_DIGEST: ${{ needs.image.outputs.openings-worker }}
+          API_DIGEST: ${{ needs.image.outputs.openings-api }}
+        run: .github/scripts/release_state.sh

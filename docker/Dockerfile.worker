@@ -1,13 +1,24 @@
-ARG SPARK_IMAGE=apache/spark:4.1.3-scala2.13-java21-python3-ubuntu
+# Research worker: one Spark driver (local[2]) per opening, writing Iceberg through the
+# Lakekeeper REST catalog. Base images are pinned by digest and the Iceberg JARs by SHA-256
+# (cross-checked against Maven Central's published SHA-1), so a rebuild of the same commit
+# gets the same inputs. Dependabot bumps the digests; bump a JAR's version and checksum together.
+# Spark 4.1 runs on Java 17 or 21; it is copied onto the Python image's JDK 17.
+ARG SPARK_IMAGE=apache/spark:4.1.3-scala2.13-java21-python3-ubuntu@sha256:bf9d035a7c32a8ca46aa58d6348182ffd7d2dff6409206ecfbb3915ff1fef211
 FROM ${SPARK_IMAGE} AS spark-runtime
-FROM python:3.12-slim-bookworm
-RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre-headless procps \
+FROM python:3.12-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70
+# OS security updates on top of the pinned base (CI fails on fixable critical CVEs).
+RUN apt-get update && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends openjdk-17-jre-headless procps \
     && rm -rf /var/lib/apt/lists/* && useradd --uid 185 --no-create-home spark
 COPY --from=spark-runtime /opt/spark /opt/spark
-ARG ICEBERG_VERSION=1.12.0
-ARG MAVEN=https://repo1.maven.org/maven2
-ADD ${MAVEN}/org/apache/iceberg/iceberg-spark-runtime-4.1_2.13/${ICEBERG_VERSION}/iceberg-spark-runtime-4.1_2.13-${ICEBERG_VERSION}.jar /opt/spark/jars/
-ADD ${MAVEN}/org/apache/iceberg/iceberg-azure-bundle/${ICEBERG_VERSION}/iceberg-azure-bundle-${ICEBERG_VERSION}.jar /opt/spark/jars/
+# Derby only backs Spark's embedded Hive metastore, which the worker never uses (it uses the
+# Iceberg REST catalog); removing it drops CVE-2022-46337 from the image.
+RUN rm -f /opt/spark/jars/derby-*.jar
+ARG MAVEN=https://repo1.maven.org/maven2/org/apache/iceberg
+ADD --checksum=sha256:3123c3798af642dd537230923548e013ef41cc28b6626e5225808cf5670a0f82 \
+    ${MAVEN}/iceberg-spark-runtime-4.1_2.13/1.12.0/iceberg-spark-runtime-4.1_2.13-1.12.0.jar /opt/spark/jars/
+ADD --checksum=sha256:2a1292015a69e6822da4b02870c0f497214bdc25db25df57f378082b91d78d98 \
+    ${MAVEN}/iceberg-azure-bundle/1.12.0/iceberg-azure-bundle-1.12.0.jar /opt/spark/jars/
 RUN chmod 0644 /opt/spark/jars/*.jar
 WORKDIR /opt/research
 COPY pyproject.toml ./
