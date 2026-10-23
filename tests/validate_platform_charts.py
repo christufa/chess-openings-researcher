@@ -101,8 +101,10 @@ def check_gitops(platform):
     engine_values = yaml.safe_load(engines_app["spec"]["template"]["spec"]["source"]["helm"]["values"])
     allowed_from = engine_values["networkPolicy"]["allowFrom"]
     assert {a["namespace"] for a in allowed_from} == {"openings-research", "argo", "cloudflared"}
-    assert engine_values["nodeSelector"] == {"workload": None, "kubernetes.azure.com/agentpool": "system"}
-    assert engine_values["tolerations"] == [] and engine_values["autoscaling"]["maxReplicas"] == 1
+    # On-demand system pool: the chart's spot switch off (it adds workload=batch when on).
+    assert engine_values["spot"] is False
+    assert engine_values["nodeSelector"] == {"kubernetes.azure.com/agentpool": "system"}
+    assert "tolerations" not in engine_values and engine_values["autoscaling"]["maxReplicas"] == 1
     binding = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
     bound = binding["spec"]["matchResources"]["namespaceSelector"]["matchExpressions"][0]["values"]
     assert set(bound) == {"openings-research", "chess-engines"}  # admission covers both
