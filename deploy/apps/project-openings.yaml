@@ -1,0 +1,27 @@
+# Argo CD project for everything in this repository except network policies. Charts like
+# Argo Workflows and cert-manager install CRDs, cluster roles and webhooks, so cluster-scoped
+# kinds are allowed; destinations are limited to the namespaces below.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: openings
+  namespace: argocd
+spec:
+  description: Opening research platform (christufa/chess-openings-researcher)
+  sourceRepos:
+    - https://github.com/christufa/chess-openings-researcher.git
+    - https://argoproj.github.io/argo-helm
+    - https://charts.jetstack.io
+    - https://cloudnative-pg.github.io/charts
+    - https://charts.external-secrets.io
+    - https://lakekeeper.github.io/lakekeeper-charts
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: argo }
+    - { server: https://kubernetes.default.svc, namespace: cert-manager }
+    - { server: https://kubernetes.default.svc, namespace: cnpg-system }
+    - { server: https://kubernetes.default.svc, namespace: external-secrets }
+    - { server: https://kubernetes.default.svc, namespace: openings-catalog }
+    - { server: https://kubernetes.default.svc, namespace: openings-research }
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

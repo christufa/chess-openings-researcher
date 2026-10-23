@@ -1,0 +1,83 @@
+# Lakekeeper: the Iceberg REST catalog for the research warehouse.
+# - Signs in to storage as the catalog identity (service account `lakekeeper`, created with
+#   its workload identity annotation by deploy/catalog) and vends table-scoped SAS tokens.
+# - Database: CloudNativePG cluster catalog-pg (deploy/catalog), backed up with Barman.
+# - Authentication: Kubernetes service account tokens with audience `lakekeeper`.
+# - Authorization: allowall. Network policy is the boundary: only the research worker and
+#   API pods can reach it (deploy/catalog/templates/network.yaml).
+# Synced after the catalog chart (wave 3) so the database and secrets exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lakekeeper
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openings
+  source:
+    repoURL: https://lakekeeper.github.io/lakekeeper-charts
+    chart: lakekeeper
+    targetRevision: 0.12.0 # Lakekeeper 0.13.3
+    helm:
+      releaseName: lakekeeper
+      valuesObject:
+        catalog:
+          replicas: 1
+          podLabels:
+            azure.workload.identity/use: "true"
+          nodeSelector:
+            kubernetes.azure.com/agentpool: system
+          config:
+            LAKEKEEPER__ENABLE_AZURE_SYSTEM_CREDENTIALS: "true"
+            LAKEKEEPER__KUBERNETES_AUTHENTICATION_SUBJECT_SOURCE: username
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          podSecurityContext:
+            runAsNonRoot: true
+            seccompProfile: { type: RuntimeDefault }
+          containerSecurityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+        serviceAccount:
+          create: false
+          name: lakekeeper
+        postgresql:
+          enabled: false
+        externalDatabase:
+          type: postgres
+          host_read: catalog-pg-rw
+          host_write: catalog-pg-rw
+          port: 5432
+          database: catalog
+          userSecret: catalog-pg-app # CloudNativePG app secret
+          userSecretKey: username
+          passwordSecret: catalog-pg-app
+          passwordSecretKey: password
+        secretBackend:
+          type: Postgres
+          postgres:
+            encryptionKeySecret: catalog-encryption # from Key Vault (deploy/catalog)
+            encryptionKeySecretKey: password
+        auth:
+          k8s:
+            enabled: true
+            audience: lakekeeper
+            legacyEnabled: false
+            createClusterRoleBinding: true # system:auth-delegator for TokenReview
+        authz:
+          backend: allowall
+        internalOpenFGA: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openings-catalog
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

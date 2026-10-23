@@ -1,0 +1,106 @@
+# Argo Workflows, installed by Argo CD from the official Helm chart.
+# Controller and UI run on the system node; every workflow pod runs on the spot batch pool
+# as openings-worker (workload identity → workflow-logs container), see workflowDefaults.
+# The UI is reached only with `kubectl port-forward -n argo service/argo-workflows-server 2746`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openings
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-workflows
+    targetRevision: 2.0.13 # Argo Workflows v4.1.5
+    helm:
+      releaseName: argo-workflows
+      valuesObject:
+        crds:
+          install: true
+          keep: true
+          full: false # plain CRD manifests; applied server-side below
+
+        # The research chart (deploy/chart) creates openings-worker with its workload
+        # identity annotation and the executor Role/RoleBinding.
+        workflow:
+          serviceAccount:
+            create: false
+            name: openings-worker
+          rbac:
+            create: false
+
+        # The executor digest is also pinned in the research namespace's admission policy
+        # (deploy/platform-base/templates/image-policy.yaml): change both together.
+        executor:
+          image:
+            tag: v4.1.5@sha256:8275c3b970f399e9264ebd5f57e17f554e7494046d0f36f5f05ae2570a601de2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 8737 # Argo's documented non-root uid
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+        mainContainer:
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+
+        controller:
+          podSecurityContext:
+            seccompProfile: { type: RuntimeDefault }
+          workflowNamespaces:
+            - openings-research
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+          workflowDefaults:
+            spec:
+              serviceAccountName: openings-worker
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile: { type: RuntimeDefault }
+              podMetadata:
+                labels:
+                  azure.workload.identity/use: "true"
+              nodeSelector:
+                workload: batch
+              tolerations:
+                - key: kubernetes.azure.com/scalesetpriority
+                  operator: Equal
+                  value: spot
+                  effect: NoSchedule
+              # Step logs are archived to the workflow-logs container (the research
+              # namespace's default artifact repository), so pods can be cleaned up.
+              podGC:
+                strategy: OnWorkflowCompletion
+                deleteDelayDuration: 1h
+              ttlStrategy:
+                secondsAfterCompletion: 604800 # keep finished workflows in the UI for 7 days
+
+        server:
+          podSecurityContext:
+            seccompProfile: { type: RuntimeDefault }
+          authModes: [server]
+          secure: false
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # CRDs are too large for client-side apply annotations
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

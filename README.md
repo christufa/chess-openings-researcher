@@ -15,6 +15,7 @@ Tavily or saved sources -> collect -> extract -> validate -> review -> publish
 ```
 
 - [Infrastructure](infra/README.md): Terraform stacks, privacy boundaries, apply order.
+- [Deploy](deploy/README.md): Argo CD apps, sync order, first bring-up, access boundaries.
 - [Kubernetes runtime](docs/kubernetes.md): Argo batch, Iceberg catalog, explorer.
 - [Research contract](docs/research-product.md).
 

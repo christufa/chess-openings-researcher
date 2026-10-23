@@ -1,4 +1,5 @@
-# Supply immutable, published image digests before installing.
+# Supply immutable, published image digests before installing (deploy/apps/research.yaml
+# does, from the deploy-state branch).
 workerImage: ""
 apiImage: ""
 catalogUri: ""
@@ -6,14 +7,23 @@ warehouse: "openings-research"
 catalog: "research"
 fileIO: "org.apache.iceberg.azure.adlsv2.ADLSFileIO"
 catalogTokenAudience: "lakekeeper"
+providerSecret: "openings-provider-keys"
+# Where catalog-bootstrap points the warehouse: abfss://<researchContainer>@<storageAccount>.
+storageAccount: ""
+researchContainer: "research"
+# Argo archives step logs here as openings-worker (workload identity). Leave clientId
+# empty to keep logs only in the pods.
+workflowLogs:
+  container: "workflow-logs"
+  clientId: ""
+# Trino serving is being replaced by direct Iceberg reads; until then the API reads
+# through Trino only when trinoHost is set.
 trinoHost: ""
 trinoPort: "8443"
 trinoCatalog: "research"
 trinoUser: "openings-api"
 trinoTokenAudience: "trino"
 caConfigMap: "internal-ca"
-providerSecret: "openings-provider-keys"
-catalogPrivateCA: false
 secrets:
   enabled: false
   clientId: ""

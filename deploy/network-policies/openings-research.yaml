@@ -1,0 +1,53 @@
+# openings-research: the only namespace that handles untrusted input (web pages and model
+# output), so it is limited in both directions.
+#
+# Ingress: nothing (the chart's NetworkPolicy also denies it). The explorer is reached
+# with kubectl port-forward, which policy doesn't apply to.
+#
+# Egress, for every pod here:
+#   - cluster DNS
+#   - Lakekeeper (openings-catalog, 8181)
+#   - the Kubernetes API (the Argo executor reports step results)
+#   - HTTPS to the internet: OpenAI, Tavily, Entra ID token exchange and the storage
+#     account (its firewall only admits the AKS subnet anyway). Filtering by domain name
+#     needs Advanced Container Networking Services, which costs extra; port 443 only is
+#     the cheap cut. Everything else in the cluster (Argo CD, Postgres, other namespaces)
+#     and every other port is unreachable.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: openings-research
+spec:
+  endpointSelector: {}
+  ingress:
+    - {} # an empty rule selects no peers: deny all ingress
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: limited-egress
+  namespace: openings-research
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: openings-catalog
+            app.kubernetes.io/name: lakekeeper
+      toPorts:
+        - ports:
+            - { port: "8181", protocol: TCP }
+    - toEntities: [kube-apiserver]
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }

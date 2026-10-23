@@ -1,0 +1,78 @@
+# Default-deny ingress for the platform namespaces (Cilium). Once a pod is selected by a
+# policy with an ingress section, everything not listed is dropped. `kubectl port-forward`
+# enters the pod's network namespace through the kubelet and isn't subject to policy, so
+# the Argo CD and Argo Workflows UIs keep working.
+#
+# openings-catalog's policies live in its chart (deploy/catalog/templates/network.yaml).
+
+# argo: UI server <-> controller only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: argo
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {} # any pod in this namespace
+---
+# argocd: server, repo-server, redis and controllers talk to each other only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: argocd
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+---
+# Operators with admission webhooks: their own pods, plus the API server (it reaches
+# webhooks through konnectivity, which shows up as these entities or kube-system).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: cert-manager
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+    - fromEntities: [kube-apiserver, host, remote-node]
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+---
+# cnpg-system also runs the Barman Cloud plugin, which the operator calls in-namespace.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: cnpg-system
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+    - fromEntities: [kube-apiserver, host, remote-node]
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: external-secrets
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+    - fromEntities: [kube-apiserver, host, remote-node]
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system

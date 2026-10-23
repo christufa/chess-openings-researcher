@@ -1,0 +1,23 @@
+# Argo CD project for network policies in every namespace. It can only create
+# CiliumNetworkPolicies, in exactly these namespaces, so it can't deploy workloads.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-security
+  namespace: argocd
+spec:
+  description: Network policies for every namespace (christufa/chess-openings-researcher)
+  sourceRepos:
+    - https://github.com/christufa/chess-openings-researcher.git
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: argo }
+    - { server: https://kubernetes.default.svc, namespace: argocd }
+    - { server: https://kubernetes.default.svc, namespace: cert-manager }
+    - { server: https://kubernetes.default.svc, namespace: cnpg-system }
+    - { server: https://kubernetes.default.svc, namespace: external-secrets }
+    - { server: https://kubernetes.default.svc, namespace: openings-catalog }
+    - { server: https://kubernetes.default.svc, namespace: openings-research }
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: cilium.io
+      kind: CiliumNetworkPolicy
