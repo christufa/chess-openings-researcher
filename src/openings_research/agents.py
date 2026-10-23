@@ -1,6 +1,7 @@
 """Adapters return candidates; they cannot write accepted Delta tables."""
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -52,11 +53,33 @@ class ResearchAgent(Protocol):
     def extract(self, request: ResearchInput) -> Extraction: ...
 
 
+def openai_client(api_key: str = ""):
+    """OpenAI client: keyless Azure OpenAI when OPENINGS_AZURE_OPENAI_ENDPOINT is set.
+
+    On the cluster the worker's service account signs in through workload identity
+    (DefaultAzureCredential) and the client sends a fresh Entra token on every request;
+    the Azure OpenAI account has key authentication disabled. Without the endpoint, the
+    public OpenAI API with an explicit key is used (local runs and tests).
+    """
+    from openai import OpenAI
+
+    endpoint = os.getenv("OPENINGS_AZURE_OPENAI_ENDPOINT", "").rstrip("/")
+    if endpoint:
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+        token = get_bearer_token_provider(DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default")
+        return OpenAI(base_url=f"{endpoint}/openai/v1/", api_key=token, timeout=120, max_retries=2)
+    return OpenAI(api_key=api_key, timeout=120, max_retries=2)
+
+
+def reasoning_options(model: str) -> dict:
+    """GPT-5 models reason before answering; keep that short so it fits the output cap."""
+    return {"reasoning": {"effort": "low"}} if model.startswith("gpt-5") else {}
+
+
 class OpenAIAgent:
     def __init__(self, api_key: str, model: str):
-        from openai import OpenAI
-
-        self.client = OpenAI(api_key=api_key, timeout=120, max_retries=2)
+        self.client = openai_client(api_key)
         self.model = model
 
     def extract(self, request: ResearchInput) -> Extraction:
@@ -84,6 +107,7 @@ class OpenAIAgent:
             model=self.model,
             store=False,
             max_output_tokens=8000,
+            **reasoning_options(self.model),
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},

@@ -52,7 +52,8 @@ kubectl port-forward -n openings-research service/openings-api 8000:80
 ## First bring-up
 
 1. Apply `infra/` (see `infra/README.md`), including `gitops`. Argo CD then syncs waves 0–3.
-2. Put `catalog-encryption-key`, `openai-api-key` and `tavily-api-key` in the Key Vault.
+2. Put `catalog-encryption-key` and `tavily-api-key` in the Key Vault. The model needs no
+   key: the worker calls Azure OpenAI with its workload identity.
    The catalog waits for `catalog-encryption-key` (ExternalSecret `catalog-encryption`).
 3. After the first signed images build lands on `deploy-state`, `research` syncs. Then
    create the warehouse once (idempotent):

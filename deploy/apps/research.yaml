@@ -47,6 +47,8 @@ spec:
             apiImage: '{{ index .metadata.annotations "openings.generops.dev/acr-login-server" }}/openings-api@{{ .api.digest }}'
             catalogUri: http://lakekeeper.openings-catalog.svc.cluster.local:8181/catalog
             storageAccount: '{{ index .metadata.annotations "openings.generops.dev/storage-account" }}'
+            azureOpenAI: # keyless: the worker's workload identity has Cognitive Services OpenAI User
+              endpoint: '{{ index .metadata.annotations "openings.generops.dev/openai-endpoint" }}'
             researchContainer: '{{ index .metadata.annotations "openings.generops.dev/research-container" }}'
             workflowLogs:
               container: '{{ index .metadata.annotations "openings.generops.dev/workflow-logs-container" }}'

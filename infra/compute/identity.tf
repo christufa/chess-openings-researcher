@@ -19,7 +19,8 @@ locals {
         data = { scope = "${local.container_scope}/${local.platform.catalog_backups_container}", role = "Storage Blob Data Contributor" }
       }
     }
-    # Argo archives each step's log from inside the workflow pod.
+    # Workflow pods (openings-worker): archive step logs, and call Azure OpenAI
+    # (role in openai.tf).
     workflows = {
       subject = "system:serviceaccount:${local.research_namespace}:openings-worker"
       roles = {

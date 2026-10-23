@@ -19,8 +19,8 @@ def fixtures():
 
 def test_requirements_split_on_demand_spot_and_regional_cores():
     assert requirements(CAPACITY) == {
-        "standardDASv5Family": {"startup": 4, "maximum": 4, "maximum_with_surge": 8},
-        "cores": {"startup": 4, "maximum": 4, "maximum_with_surge": 8},
+        "standardDASv5Family": {"startup": 4, "maximum": 8, "maximum_with_surge": 12},
+        "cores": {"startup": 4, "maximum": 8, "maximum_with_surge": 12},
         "lowPriorityCores": {"startup": 0, "maximum": 4, "maximum_with_surge": 8},
     }
     usage, skus = fixtures()
@@ -43,9 +43,11 @@ def test_family_approval_does_not_bypass_regional_quota():
     assert report["quotas"]["cores"]["startup_target_limit"] == 18
 
 
-def test_one_system_node_fits_the_shared_family_quota():
+def test_two_system_nodes_need_more_than_the_original_family_quota():
     usage, skus = fixtures()
     usage[0].update(currentValue="8", limit="16")  # lichess-delta-kube already uses 8
+    assert not assess(CAPACITY, usage, skus, "eastus2")["full_capacity_ready"]
+    usage[0]["limit"] = "32"  # after the quota increase
     assert assess(CAPACITY, usage, skus, "eastus2")["full_capacity_ready"]
 
 

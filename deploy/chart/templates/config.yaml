@@ -8,6 +8,9 @@ data:
   OPENINGS_WAREHOUSE: {{ .Values.warehouse | quote }}
   OPENINGS_FILE_IO: {{ .Values.fileIO | quote }}
   OPENINGS_CATALOG_TOKEN_FILE: /var/run/research/catalog/token
+  {{- with .Values.azureOpenAI.endpoint }}
+  OPENINGS_AZURE_OPENAI_ENDPOINT: {{ . | quote }}
+  {{- end }}
   # The API reads the same catalog and warehouse; "<catalog>.<schema>" names its tables.
   OPENINGS_READ_NAMESPACE: {{ printf "%s.openings_research" .Values.catalog | quote }}
 ---

@@ -33,14 +33,14 @@ resource "azurerm_virtual_network" "main" {
 }
 
 # AKS nodes. With Azure CNI Overlay pods get IPs from a separate range, so a /22 is
-# plenty. Service endpoints let the nodes through the storage and Key Vault firewalls
+# plenty. Service endpoints let the nodes through the storage, Key Vault and Azure OpenAI firewalls
 # without public IP rules or private endpoints.
 resource "azurerm_subnet" "aks" {
   name                 = "snet-aks"
   resource_group_name  = azurerm_resource_group.platform.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.84.0.0/22"]
-  service_endpoints    = ["Microsoft.Storage", "Microsoft.KeyVault"]
+  service_endpoints    = ["Microsoft.Storage", "Microsoft.KeyVault", "Microsoft.CognitiveServices"]
 }
 
 # ADLS Gen2 for the Iceberg warehouse and the catalog database backups.

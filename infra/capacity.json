@@ -7,7 +7,7 @@
       "quota": "standardDASv5Family",
       "spot": false,
       "min_count": 1,
-      "max_count": 1
+      "max_count": 2
     },
     "batch": {
       "vm_size": "Standard_D4as_v5",

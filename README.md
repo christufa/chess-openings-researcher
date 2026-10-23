@@ -26,7 +26,8 @@ Tavily or saved sources -> collect -> extract -> validate -> review -> publish
   documents. Raw responses (including extraction failures) are retained. The agent
   sees up to 10,000 characters per document; the saved source version is that exact
   excerpt, while the raw response retains the full returned text.
-- An OpenAI structured-output adapter (configurable model, default `gpt-4.1-mini`)
+- An OpenAI structured-output adapter (configurable model, default `gpt-5.4-mini`; on the
+  cluster it calls Azure OpenAI keylessly with the worker's workload identity)
   extracts move sequences, plans, pawn breaks, maneuvers, tactics and assessments.
   It selects numbered source passages; the pipeline copies their original text
   into evidence records. The model does not generate evidence quotations.
