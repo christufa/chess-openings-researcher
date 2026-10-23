@@ -38,3 +38,9 @@ variable "github_oidc_repository" {
   type        = string
   default     = "christufa/chess-openings-researcher"
 }
+
+variable "github_oidc_engines_repository" {
+  description = "The shared chess-engines repository, which may also push its image (owner/name, or the immutable owner@id/name@id form)"
+  type        = string
+  default     = "christufa/chess-engines"
+}

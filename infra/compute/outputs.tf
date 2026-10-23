@@ -19,6 +19,11 @@ output "key_vault_uri" {
   value = azurerm_key_vault.main.vault_uri
 }
 
+# ../gitops stores the chess-engines Access service token here.
+output "key_vault_id" {
+  value = azurerm_key_vault.main.id
+}
+
 # GitHub repository variable AZURE_CI_CLIENT_ID for the images workflow.
 output "ci_client_id" {
   value = azurerm_user_assigned_identity.ci.client_id

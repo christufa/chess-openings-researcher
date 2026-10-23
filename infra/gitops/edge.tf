@@ -9,6 +9,10 @@
 #
 # Public hostname (<prefix>): the research explorer and its read-only API, rate-limited per
 # client IP by the API itself (CF-Connecting-IP).
+#
+# Machine hostname (chess-engines.<domain>): the shared engine API (christufa/chess-engines)
+# for projects outside this cluster. Cloudflare Access admits only its service tokens (no
+# sign-in page: anything else gets a 401), and cloudflared re-checks the Access token.
 # https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
 locals {
   private_hosts = {
@@ -27,6 +31,9 @@ locals {
   }
   public_hostname = "${var.hostname_prefix}.${var.domain}"
   public_service  = "http://openings-api.openings-research.svc.cluster.local:80"
+
+  engines_hostname = "${var.chess_engines_hostname}.${var.domain}"
+  engines_service  = "http://chess-engines.chess-engines.svc.cluster.local:80"
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared" "aks" {
@@ -64,6 +71,58 @@ resource "cloudflare_zero_trust_access_application" "private" {
   policies                   = [{ id = cloudflare_zero_trust_access_policy.owner.id, precedence = 1 }]
 }
 
+# ---- chess-engines: service tokens only ----
+
+# One token per calling project, so each can be rotated or revoked on its own.
+resource "cloudflare_zero_trust_access_service_token" "chess_engines" {
+  for_each = var.chess_engines_service_tokens
+
+  account_id = var.cloudflare_account_id
+  name       = "chess-engines: ${each.key}"
+  duration   = "8760h" # a year; Cloudflare emails before expiry, then re-apply to rotate
+}
+
+resource "cloudflare_zero_trust_access_policy" "chess_engines" {
+  account_id = var.cloudflare_account_id
+  name       = "chess-engines: service tokens"
+  decision   = "non_identity"
+  include = [for t in cloudflare_zero_trust_access_service_token.chess_engines :
+  { service_token = { token_id = t.id } }]
+}
+
+resource "cloudflare_zero_trust_access_application" "chess_engines" {
+  account_id                = var.cloudflare_account_id
+  name                      = "chess-engines API"
+  type                      = "self_hosted"
+  domain                    = local.engines_hostname
+  destinations              = [{ type = "public", uri = local.engines_hostname }]
+  session_duration          = "24h"
+  allowed_idps              = [var.access_identity_provider_id] # unused: no identity policy
+  app_launcher_visible      = false
+  service_auth_401_redirect = true # an API: 401 for missing tokens, not a login redirect
+  policies                  = [{ id = cloudflare_zero_trust_access_policy.chess_engines.id, precedence = 1 }]
+}
+
+# Copies for callers in other clusters (External Secrets, CI secrets). Writing needs your
+# IP in the vault's firewall, like any other secret you set by hand.
+resource "azurerm_key_vault_secret" "chess_engines_client_id" {
+  for_each = cloudflare_zero_trust_access_service_token.chess_engines
+
+  name         = "chess-engines-${each.key}-client-id"
+  value        = each.value.client_id
+  key_vault_id = local.compute.key_vault_id
+  content_type = "Cloudflare Access service token ID for https://${local.engines_hostname}"
+}
+
+resource "azurerm_key_vault_secret" "chess_engines_client_secret" {
+  for_each = cloudflare_zero_trust_access_service_token.chess_engines
+
+  name         = "chess-engines-${each.key}-client-secret"
+  value        = each.value.client_secret
+  key_vault_id = local.compute.key_vault_id
+  content_type = "Cloudflare Access service token secret for https://${local.engines_hostname}"
+}
+
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "aks" {
   account_id = var.cloudflare_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.aks.id
@@ -82,6 +141,17 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "aks" {
         }
       }],
       [{ hostname = local.public_hostname, service = local.public_service }],
+      [{
+        hostname = local.engines_hostname
+        service  = local.engines_service
+        origin_request = {
+          access = {
+            required  = true
+            team_name = var.cloudflare_team_name
+            aud_tag   = [cloudflare_zero_trust_access_application.chess_engines.aud]
+          }
+        }
+      }],
       [{ service = "http_status:404" }], # anything else
     )
   }
@@ -107,6 +177,16 @@ resource "cloudflare_dns_record" "public" {
   proxied = true
   ttl     = 1
   comment = "openings-researcher: research explorer via Cloudflare Tunnel (infra/gitops/edge.tf)"
+}
+
+resource "cloudflare_dns_record" "chess_engines" {
+  zone_id = var.cloudflare_zone_id
+  name    = local.engines_hostname
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.aks.id}.cfargotunnel.com"
+  proxied = true
+  ttl     = 1
+  comment = "chess-engines API via Cloudflare Tunnel + Access service tokens (infra/gitops/edge.tf)"
 }
 
 # The tunnel token for cloudflared, straight into the cluster (never in a file or git).

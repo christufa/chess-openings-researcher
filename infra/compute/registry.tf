@@ -25,7 +25,7 @@ resource "azurerm_role_assignment" "acr_aks" {
 
 # --- CI identity (GitHub Actions OIDC) ---------------------------------------------
 # The images workflow signs in with a GitHub OIDC token and pushes images. Azure only
-# accepts tokens for this repository's main branch, and the identity can do nothing
+# accepts tokens for this repository's (and chess-engines') main branch, and the identity can do nothing
 # but push to the registry. No stored secrets; GitHub-hosted runners.
 resource "azurerm_user_assigned_identity" "ci" {
   name                = "id-${var.project}-ci"
@@ -40,6 +40,16 @@ resource "azurerm_federated_identity_credential" "ci_main" {
   audience                  = ["api://AzureADTokenExchange"]
   issuer                    = "https://token.actions.githubusercontent.com"
   subject                   = "repo:${var.github_oidc_repository}:ref:refs/heads/main"
+}
+
+# christufa/chess-engines publishes the shared engine API image to this registry too,
+# from its own main branch only (its images.yml).
+resource "azurerm_federated_identity_credential" "ci_engines_main" {
+  name                      = "github-chess-engines-main"
+  user_assigned_identity_id = azurerm_user_assigned_identity.ci.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = "https://token.actions.githubusercontent.com"
+  subject                   = "repo:${var.github_oidc_engines_repository}:ref:refs/heads/main"
 }
 
 resource "azurerm_role_assignment" "ci_acr" {
@@ -63,7 +73,7 @@ resource "azurerm_container_registry_task" "purge" {
     task_content = base64encode(<<-EOT
       version: v1.1.0
       steps:
-        - cmd: acr purge --filter 'openings-.*:^[0-9a-f]{40}$' --ago 30d --keep 10 --untagged
+        - cmd: acr purge --filter 'openings-.*:^[0-9a-f]{40}$' --filter 'chess-engines:^[0-9a-f]{40}$' --ago 30d --keep 10 --untagged
           disableWorkingDirectoryOverride: true
           timeout: 3600
     EOT

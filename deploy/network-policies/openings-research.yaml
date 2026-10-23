@@ -7,6 +7,7 @@
 # Egress, for every pod here:
 #   - cluster DNS
 #   - Lakekeeper (openings-catalog, 8181)
+#   - the shared chess-engines API (chess-engines, 8000)
 #   - the Kubernetes API (the Argo executor reports step results)
 #   - HTTPS to the internet: OpenAI, Tavily, Entra ID token exchange and the storage
 #     account (its firewall only admits the AKS subnet anyway). Filtering by domain name
@@ -46,6 +47,13 @@ spec:
       toPorts:
         - ports:
             - { port: "8181", protocol: TCP }
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: chess-engines
+            app.kubernetes.io/name: chess-engines
+      toPorts:
+        - ports:
+            - { port: "8000", protocol: TCP }
     - toEntities: [kube-apiserver]
     - toEntities: [world]
       toPorts:

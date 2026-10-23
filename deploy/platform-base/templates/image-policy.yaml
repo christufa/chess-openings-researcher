@@ -3,7 +3,8 @@
 {{- fail "registry must be an Azure registry hostname" }}
 {{- end }}
 # Built-in admission (no Kyverno): research pods may run only digest-pinned images
-# from this cluster's registry, plus the pinned Argo executor.
+# from this cluster's registry, plus the pinned Argo executor; chess-engines pods only the
+# digest-pinned chess-engines image from it.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -22,10 +23,15 @@ spec:
         object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : []) + (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
   validations:
     - expression: >-
+        request.namespace != 'openings-research' ||
         variables.containers.all(c,
           c.image.matches('^{{ $registry | replace "." "[.]" }}/openings-(api|worker)@sha256:[0-9a-f]{64}$') ||
-          (object.metadata.namespace == 'openings-research' && c.image == 'quay.io/argoproj/argoexec:v4.1.5@sha256:8275c3b970f399e9264ebd5f57e17f554e7494046d0f36f5f05ae2570a601de2'))
+          c.image == 'quay.io/argoproj/argoexec:v4.1.5@sha256:8275c3b970f399e9264ebd5f57e17f554e7494046d0f36f5f05ae2570a601de2')
       message: Only immutable application images and the explicitly pinned platform images are allowed.
+    - expression: >-
+        request.namespace != 'chess-engines' ||
+        variables.containers.all(c, c.image.matches('^{{ $registry | replace "." "[.]" }}/chess-engines@sha256:[0-9a-f]{64}$'))
+      message: chess-engines runs only its digest-pinned image from this cluster's registry.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -39,4 +45,4 @@ spec:
       matchExpressions:
         - key: kubernetes.io/metadata.name
           operator: In
-          values: [openings-research]
+          values: [openings-research, chess-engines]

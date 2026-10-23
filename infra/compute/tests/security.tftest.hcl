@@ -30,10 +30,11 @@ override_data {
 }
 
 variables {
-  subscription_id            = "00000000-0000-0000-0000-000000000001"
-  state_resource_group_name  = "rg-openings-tfstate"
-  state_storage_account_name = "stopeningsstate"
-  github_oidc_repository     = "christufa/chess-openings-researcher" # independent of any local tfvars
+  subscription_id                = "00000000-0000-0000-0000-000000000001"
+  state_resource_group_name      = "rg-openings-tfstate"
+  state_storage_account_name     = "stopeningsstate"
+  github_oidc_repository         = "christufa/chess-openings-researcher" # independent of any local tfvars
+  github_oidc_engines_repository = "christufa/chess-engines"
 }
 
 run "lean_private_cluster" {
@@ -62,6 +63,14 @@ run "lean_private_cluster" {
   assert {
     condition     = azurerm_federated_identity_credential.ci_main.subject == "repo:christufa/chess-openings-researcher:ref:refs/heads/main" && azurerm_role_assignment.ci_acr.role_definition_name == "AcrPush"
     error_message = "CI may only push images, and only from main."
+  }
+  assert {
+    condition     = azurerm_federated_identity_credential.ci_engines_main.subject == "repo:christufa/chess-engines:ref:refs/heads/main"
+    error_message = "chess-engines may push its image only from main."
+  }
+  assert {
+    condition     = azurerm_kubernetes_cluster.main.workload_autoscaler_profile[0].keda_enabled
+    error_message = "KEDA scales the chess-engines API."
   }
   assert {
     condition     = azurerm_federated_identity_credential.workload["catalog"].subject == "system:serviceaccount:openings-catalog:lakekeeper"

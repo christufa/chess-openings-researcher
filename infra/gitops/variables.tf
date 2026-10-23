@@ -85,3 +85,19 @@ variable "access_identity_provider_id" {
   description = "Cloudflare Access identity provider to sign in with (lichess-delta-kube's Microsoft Entra ID provider)"
   type        = string
 }
+
+variable "chess_engines_hostname" {
+  description = "<name>.<domain> serves the shared chess-engines API to service tokens only"
+  type        = string
+  default     = "chess-engines"
+}
+
+variable "chess_engines_service_tokens" {
+  description = "Cloudflare Access service tokens for chess-engines, one per calling project (lowercase names)"
+  type        = set(string)
+  default     = ["shared"]
+  validation {
+    condition     = alltrue([for n in var.chess_engines_service_tokens : can(regex("^[a-z0-9-]{1,40}$", n))])
+    error_message = "Token names are lowercase letters, digits and hyphens (they name Key Vault secrets)."
+  }
+}

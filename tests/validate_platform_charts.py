@@ -84,6 +84,23 @@ def check_gitops(platform):
     egress = next(obj for obj in policies if obj["metadata"]["name"] == "limited-egress")
     world = [rule for rule in egress["spec"]["egress"] if "world" in rule.get("toEntities", [])]
     assert [p["port"] for rule in world for ports in rule["toPorts"] for p in ports["ports"]] == ["443"]
+    # Research may call the shared chess-engines API, on its port only.
+    engines_egress = [rule for rule in egress["spec"]["egress"]
+                      if any(e["matchLabels"].get("k8s:io.kubernetes.pod.namespace") == "chess-engines"
+                             for e in rule.get("toEndpoints", []))]
+    assert [p["port"] for rule in engines_egress for ports in rule["toPorts"] for p in ports["ports"]] == ["8000"]
+
+    # chess-engines (another repository) may deploy only namespaced resources into its namespace.
+    engines = projects["chess-engines"]["spec"]
+    assert engines["clusterResourceWhitelist"] == []
+    assert [d["namespace"] for d in engines["destinations"]] == ["chess-engines"]
+    assert engines["sourceRepos"] == ["https://github.com/christufa/chess-engines.git"]
+    engines_app = next(obj for obj in apps if obj["kind"] == "ApplicationSet" and obj["metadata"]["name"] == "chess-engines")
+    allowed_from = engines_app["spec"]["template"]["spec"]["source"]["helm"]["valuesObject"]["networkPolicy"]["allowFrom"]
+    assert {a["namespace"] for a in allowed_from} == {"openings-research", "argo", "cloudflared"}
+    binding = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
+    bound = binding["spec"]["matchResources"]["namespaceSelector"]["matchExpressions"][0]["values"]
+    assert set(bound) == {"openings-research", "chess-engines"}  # admission covers both
 
 
 def main():
