@@ -100,6 +100,9 @@ def check_gitops(platform):
     engines_app = next(obj for obj in apps if obj["kind"] == "ApplicationSet" and obj["metadata"]["name"] == "chess-engines")
     allowed_from = engines_app["spec"]["template"]["spec"]["source"]["helm"]["valuesObject"]["networkPolicy"]["allowFrom"]
     assert {a["namespace"] for a in allowed_from} == {"openings-research", "argo", "cloudflared"}
+    engine_values = engines_app["spec"]["template"]["spec"]["source"]["helm"]["valuesObject"]
+    assert engine_values["nodeSelector"] == {"workload": None, "kubernetes.azure.com/agentpool": "system"}
+    assert engine_values["tolerations"] == [] and engine_values["autoscaling"]["maxReplicas"] == 1
     binding = next(obj for obj in platform if obj["kind"] == "ValidatingAdmissionPolicyBinding")
     bound = binding["spec"]["matchResources"]["namespaceSelector"]["matchExpressions"][0]["values"]
     assert set(bound) == {"openings-research", "chess-engines"}  # admission covers both
@@ -131,7 +134,7 @@ def main():
     research = render("chart", "openings-research", {
         **secrets, **images, "secrets.enabled": "true", "storageAccount": "fixture",
         "azureOpenAI.endpoint": "https://oai-fixture.openai.azure.com/",
-        "workflowLogs.clientId": "fixture"})
+        "workflowLogs.clientId": "fixture", "engine.url": "http://engines.fixture"})
     check_pods(research)
     providers = next(obj for obj in research if obj["kind"] == "ExternalSecret")
     assert {item["secretKey"] for item in providers["spec"]["data"]} == {"TAVILY_API_KEY"}  # model is keyless
@@ -149,6 +152,8 @@ def main():
     assert params["mode"] == "refresh" and params["source-run-id"] == ""  # paid collection only when asked
     opening = next(t for t in batch["spec"]["templates"] if t["name"] == "opening")
     assert {"--mode", "--source-run-id"} <= set(opening["container"]["args"])
+    evaluate = next(obj for obj in research if obj["metadata"]["name"] == "evaluate-book")
+    assert evaluate["spec"]["templates"][0]["nodeSelector"] == {"kubernetes.azure.com/agentpool": "system"}
     names = {obj["metadata"]["name"] for obj in research}
     assert {"openings-batch", "catalog-bootstrap", "artifact-repositories"} <= names
     worker = next(obj for obj in research if obj["kind"] == "ServiceAccount" and obj["metadata"]["name"] == "openings-worker")
