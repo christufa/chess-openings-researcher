@@ -68,3 +68,42 @@ def test_tree_endpoint_serves_published_lines():
         fen = root["moves"][0]["fen"]
         assert client.get("/api/v1/tree", params={"fen": fen}).json()["moves"][0]["san"] == "e5"
         assert client.get("/api/v1/tree", params={"fen": "not a fen at all"}).status_code == 400
+
+
+def ev(uci, san, cp=None, mate=None, rank=1, depth=20):
+    return {"move_uci": uci, "move_san": san, "score_cp": cp, "mate": mate, "depth": depth, "rank": rank,
+            "engine": "stockfish", "engine_version": "17.1"}
+
+
+def test_book_moves_come_first_even_when_the_engine_dislikes_them():
+    from openings_research.tree import rank_moves
+
+    tree = BookTree([line("King's Gambit", "King's Gambit", "e2e4", "e7e5", "f2f4"),
+                     line("Vienna", "Vienna", "e2e4", "e7e5", "b1c3")])
+    position = tree.lookup("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")
+    ranked = rank_moves(position, [
+        ev("g1f3", "Nf3", cp=35, rank=1), ev("b1c3", "Nc3", cp=20, rank=2), ev("f2f4", "f4", cp=-60, rank=3),
+        ev("d2d4", "d4", cp=5, rank=4), ev("d1h5", "Qh5", cp=-120, rank=5), ev("g2g4", "g4", mate=-9, rank=6),
+        ev("a1a3", "Ra3", cp=0, rank=7),  # illegal here: must be ignored
+    ])
+    moves = [(m["san"], m["quality"]) for m in ranked["moves"]]
+    # Book first (Nc3 15 behind, f4 95 behind), then engine moves by quality, then loss.
+    assert moves == [("Nc3", "book"), ("f4", "book"), ("Nf3", "good"), ("d4", "good"), ("Qh5", "poor"), ("g4", "poor")]
+    f4 = ranked["moves"][1]
+    assert f4["engine_quality"] == "weaker" and f4["loss_cp"] == 95 and f4["book"]
+    assert ranked["evaluated"] and ranked["engine"] == {"name": "stockfish", "version": "17.1", "depth": 20}
+
+
+def test_without_evaluations_the_book_is_served_unchanged():
+    from openings_research.tree import rank_moves
+
+    tree = BookTree([line("Italian Game", "Italian", "e2e4")])
+    ranked = rank_moves(tree.lookup(START_FEN), [])
+    assert [(m["san"], m["quality"], m["loss_cp"]) for m in ranked["moves"]] == [("e4", "book", None)]
+    assert not ranked["evaluated"] and ranked["engine"] is None
+
+
+def test_mate_scores_outrank_centipawns():
+    from openings_research.tree import score_value
+
+    assert score_value(None, 3) > score_value(None, 7) > score_value(900, None) > score_value(None, -7) > score_value(None, -3)

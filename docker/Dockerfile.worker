@@ -24,7 +24,7 @@ WORKDIR /opt/research
 COPY pyproject.toml ./
 COPY src ./src
 RUN python3 -m pip install --no-cache-dir .
-COPY docker/run_worker.py docker/smoke_iceberg.py ./
+COPY docker/run_worker.py docker/run_evaluate.py docker/smoke_iceberg.py ./
 ARG CODE_VERSION=local
 ENV OPENINGS_CODE_VERSION=${CODE_VERSION} HOME=/tmp PYTHONDONTWRITEBYTECODE=1 \
     SPARK_HOME=/opt/spark PYSPARK_PYTHON=/usr/local/bin/python3

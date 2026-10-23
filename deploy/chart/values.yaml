@@ -20,6 +20,12 @@ researchContainer: "research"
 workflowLogs:
   container: "workflow-logs"
   clientId: ""
+# The shared engine service (christufa/chess-engines). Empty = no evaluate-book template.
+engine:
+  url: ""
+  name: stockfish
+  depth: 20
+  multipv: 5
 secrets:
   enabled: false
   clientId: ""
