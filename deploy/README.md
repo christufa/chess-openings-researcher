@@ -49,7 +49,7 @@ The only way in is an outbound Cloudflare Tunnel (`deploy/cloudflared`, routes i
 | `chess-openings.generops.dev` | Research explorer and read-only API | Public; the API rate-limits per client IP (`CF-Connecting-IP`) |
 | `chess-openings-cd.generops.dev` | Argo CD | Cloudflare Access, Microsoft sign-in, owner only |
 | `chess-openings-flows.generops.dev` | Argo Workflows | Cloudflare Access, Microsoft sign-in, owner only |
-| `chess-engines.generops.dev` | The shared chess-engines API, for other projects | Cloudflare Access service tokens only (`CF-Access-Client-Id` and `CF-Access-Client-Secret` headers); copies in Key Vault as `chess-engines-<name>-client-id` and `-client-secret` |
+| `chess-engines.generops.dev` | The shared chess-engines API for other projects, and its playground UI at `/` | Cloudflare Access: service tokens for programs (`CF-Access-Client-Id` and `CF-Access-Client-Secret` headers; copies in Key Vault as `chess-engines-<name>-client-id` and `-client-secret`), or Microsoft sign-in, owner only, for the playground |
 
 Network policies let cloudflared reach only those four Services. In the cluster, research
 pods call `http://chess-engines.chess-engines.svc.cluster.local` directly. Port-forward still
