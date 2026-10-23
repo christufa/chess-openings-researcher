@@ -36,16 +36,24 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
-  # cert-manager's CA injector fills in caBundle on its own webhooks (annotation
-  # cert-manager.io/inject-ca-from-secret); the chart leaves it empty, so without this the
-  # app shows OutOfSync forever. RespectIgnoreDifferences keeps syncs from blanking it.
+  # Two fields on cert-manager's webhooks are filled in after the chart renders them, so
+  # without this the app shows OutOfSync forever:
+  #   - caBundle, injected by cert-manager's CA injector (cert-manager.io/inject-ca-from-secret)
+  #   - two namespaceSelector entries AKS's admissions enforcer appends to every webhook so
+  #     it never intercepts AKS-managed namespaces (control-plane, kubernetes.azure.com/managedby)
+  # Only those entries are ignored; the chart's own selector rule still shows drift.
+  # RespectIgnoreDifferences keeps syncs from removing them.
   ignoreDifferences:
     - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
-      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+        - '.webhooks[]?.namespaceSelector.matchExpressions[]? | select(.key == "control-plane" or .key == "kubernetes.azure.com/managedby")'
     - group: admissionregistration.k8s.io
       kind: MutatingWebhookConfiguration
-      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+        - '.webhooks[]?.namespaceSelector.matchExpressions[]? | select(.key == "control-plane" or .key == "kubernetes.azure.com/managedby")'
   syncPolicy:
     automated:
       prune: true
