@@ -10,7 +10,20 @@
 #   Other projects come in through cloudflared at chess-engines.<domain>, which Cloudflare
 #   Access opens to service tokens only (infra/gitops/edge.tf).
 # - Its own AppProject: the chess-engines repository can deploy only namespaced resources
-#   into the chess-engines namespace.
+#   into the chess-engines namespace. The namespace itself comes from here (the root app),
+#   so that project needs no cluster-scoped kinds.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chess-engines
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels: # only pods meeting "restricted" may run here
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -83,14 +96,6 @@ spec:
         automated:
           prune: true
           selfHeal: true
-        syncOptions:
-          - CreateNamespace=true
-        managedNamespaceMetadata:
-          labels: # only pods meeting "restricted" may run here
-            pod-security.kubernetes.io/enforce: restricted
-            pod-security.kubernetes.io/enforce-version: latest
-            pod-security.kubernetes.io/warn: restricted
-            pod-security.kubernetes.io/audit: restricted
         retry:
           limit: 10
           backoff: { duration: 30s, factor: 2, maxDuration: 5m }

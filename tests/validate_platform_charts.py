@@ -39,7 +39,7 @@ def check_gitops(platform):
     apps = load("deploy/apps")
     projects = {obj["metadata"]["name"]: obj for obj in apps if obj["kind"] == "AppProject"}
     for obj in apps:
-        if obj["kind"] == "AppProject":
+        if obj["kind"] in ("AppProject", "Namespace"):
             continue
         spec = obj["spec"]["template"]["spec"] if obj["kind"] == "ApplicationSet" else obj["spec"]
         project = projects[spec["project"]]
@@ -92,7 +92,9 @@ def check_gitops(platform):
 
     # chess-engines (another repository) may deploy only namespaced resources into its namespace.
     engines = projects["chess-engines"]["spec"]
-    assert engines["clusterResourceWhitelist"] == []
+    assert engines["clusterResourceWhitelist"] == []  # its namespace comes from the root app
+    namespace = next(obj for obj in apps if obj["kind"] == "Namespace" and obj["metadata"]["name"] == "chess-engines")
+    assert namespace["metadata"]["labels"]["pod-security.kubernetes.io/enforce"] == "restricted"
     assert [d["namespace"] for d in engines["destinations"]] == ["chess-engines"]
     assert engines["sourceRepos"] == ["https://github.com/christufa/chess-engines.git"]
     engines_app = next(obj for obj in apps if obj["kind"] == "ApplicationSet" and obj["metadata"]["name"] == "chess-engines")
