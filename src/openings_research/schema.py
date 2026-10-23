@@ -20,6 +20,7 @@ TABLES = {
     "lines": "line_id STRING, start_position_id STRING, end_position_id STRING, moves_uci ARRAY<STRING>",
     "opening_lines": "record_id STRING, run_id STRING, opening_id STRING, line_id STRING, name STRING, candidate_id STRING, review_status STRING",
     "claims": "record_id STRING, run_id STRING, opening_id STRING, claim_id STRING, text STRING, category STRING, side STRING, position_id STRING, candidate_id STRING, review_status STRING",
+    "move_evaluations": "evaluation_id STRING, position_id STRING, fen STRING, engine STRING, engine_version STRING, depth INT, rank INT, move_uci STRING, move_san STRING, score_cp INT, mate INT, pv ARRAY<STRING>, evaluated_at STRING",
     "claim_evidence": "evidence_id STRING, run_id STRING, candidate_id STRING, source_version_id STRING, excerpt STRING, relation STRING",
 }
 

@@ -101,3 +101,74 @@ class BookTree:
                 for m in moves
             ],
         }
+
+
+MATE = 100_000
+GOOD_LOSS, WEAKER_LOSS = 50, 150  # centipawns behind the best move
+
+
+def score_value(cp, mate) -> int | None:
+    """One comparable number from the side to move's view: mates beat any centipawn score."""
+    if mate is not None:
+        return MATE - mate if mate > 0 else -MATE - mate
+    return cp
+
+
+def rank_moves(position: dict, evaluations: list[dict]) -> dict:
+    """Book moves first (by evaluation, then research), then the engine's other moves by quality.
+
+    `evaluations`: move_evaluations rows for this position. When several depths exist, the
+    deepest wins. Book moves keep their place even when the engine dislikes them; their
+    evaluation is shown alongside.
+    """
+    best_rows = {}
+    for row in evaluations:
+        current = best_rows.get(row["move_uci"])
+        if current is None or row["depth"] > current["depth"]:
+            best_rows[row["move_uci"]] = row
+    scores = {uci: score_value(r["score_cp"], r["mate"]) for uci, r in best_rows.items()}
+    best = max((v for v in scores.values() if v is not None), default=None)
+
+    def graded(uci):
+        value = scores.get(uci)
+        row = best_rows.get(uci)
+        if value is None or best is None:
+            return {"score_cp": None, "mate": None, "loss_cp": None, "engine_rank": None}, None
+        loss = best - value
+        quality = "good" if loss <= GOOD_LOSS else "weaker" if loss <= WEAKER_LOSS else "poor"
+        if row["mate"] is not None and row["mate"] < 0:
+            quality = "poor"
+        return {"score_cp": row["score_cp"], "mate": row["mate"], "loss_cp": min(loss, 9999), "engine_rank": row["rank"]}, quality
+
+    book_ucis = {m["uci"] for m in position["moves"]}
+    book = []
+    for move in position["moves"]:
+        evaluation, quality = graded(move["uci"])
+        book.append({**move, **evaluation, "quality": "book", "engine_quality": quality})
+    book.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, -len(m["lines"])))
+
+    board = board_for(position["fen"])
+    engine = []
+    for uci, row in best_rows.items():
+        if uci in book_ucis:
+            continue
+        evaluation, quality = graded(uci)
+        move = chess.Move.from_uci(uci)
+        if move not in board.legal_moves:
+            continue  # stale or mismatched row: never offer an illegal move
+        after = board.copy(stack=False)
+        after.push(move)
+        engine.append({
+            "uci": uci, "san": row["move_san"], "book": False, "fen": position_record(after)["normalized_fen"],
+            "openings": [], "lines": [], "continues": False, **evaluation, "quality": quality, "engine_quality": quality,
+        })
+    order = {"good": 0, "weaker": 1, "poor": 2}
+    engine.sort(key=lambda m: (order[m["quality"]], m["loss_cp"]))
+    engine_info = next(iter(best_rows.values()), None)
+    return {
+        **position,
+        "evaluated": bool(best_rows),
+        "engine": {"name": engine_info["engine"], "version": engine_info["engine_version"], "depth": engine_info["depth"]}
+        if engine_info else None,
+        "moves": book + engine,
+    }

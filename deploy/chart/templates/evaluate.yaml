@@ -1,0 +1,67 @@
+{{- if .Values.engine.url }}
+# Evaluate every book position with the shared engine service and store the top moves in
+# move_evaluations. Positions already evaluated at this depth are skipped, so rerun it after
+# new research is published:
+#   argo submit -n openings-research --from workflowtemplate/evaluate-book --watch
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: evaluate-book
+spec:
+  serviceAccountName: openings-worker
+  entrypoint: evaluate
+  podMetadata:
+    labels:
+      openings.generops.dev/role: worker
+      azure.workload.identity/use: "true"
+  activeDeadlineSeconds: 21600
+  synchronization:
+    mutexes:
+      - name: openings-research-writer # the same single writer as research batches
+  arguments:
+    parameters:
+      - {name: depth, value: {{ .Values.engine.depth | quote }}}
+      - {name: multipv, value: {{ .Values.engine.multipv | quote }}}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 185
+    fsGroup: 185
+    seccompProfile: {type: RuntimeDefault}
+  volumes:
+    - name: scratch
+      emptyDir: {}
+    - name: catalog-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: {{ .Values.catalogTokenAudience | quote }}
+              expirationSeconds: 7200
+              path: token
+  templates:
+    - name: evaluate
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError # spot evictions; already-evaluated positions are skipped on retry
+      container:
+        image: {{ required "workerImage digest is required" .Values.workerImage | quote }}
+        command: [/opt/spark/bin/spark-submit, --master, "local[2]", --driver-memory, 2g, /opt/research/run_evaluate.py]
+        args:
+          - --engine
+          - {{ .Values.engine.name | quote }}
+          - --depth
+          - '{{ "{{workflow.parameters.depth}}" }}'
+          - --multipv
+          - '{{ "{{workflow.parameters.multipv}}" }}'
+        envFrom:
+          - configMapRef: {name: openings-config}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        resources:
+          requests: {cpu: "1", memory: 3Gi}
+          limits: {cpu: "2", memory: 4Gi}
+        volumeMounts:
+          - {name: scratch, mountPath: /tmp}
+          - {name: catalog-token, mountPath: /var/run/research/catalog, readOnly: true}
+{{- end }}
