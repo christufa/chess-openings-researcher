@@ -5,13 +5,13 @@ import { emptyTree, layout, openingName, pathTo, ROOT, scoreLabel, visibleChildr
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -";
 
 function move(uci: string, san: string, quality: TreeMove["quality"], extra: Partial<TreeMove> = {}): TreeMove {
-  return { uci, san, book: quality === "book", fen: `${uci}-fen`, openings: [], lines: [], continues: false,
+  return { uci, san, book: quality === "book", reference: quality === "reference", fen: `${uci}-fen`, openings: [], lines: [], continues: false,
     quality, engine_quality: null, score_cp: null, mate: null, loss_cp: null, ...extra };
 }
 
-function position(moves: TreeMove[], names: string[] = []): TreePosition {
-  return { position_id: "p", fen: START, side_to_move: "white", in_book: true, names, openings: [],
-    evaluated: false, engine: null, moves };
+function position(moves: TreeMove[], names: string[] = [], extra: Partial<TreePosition> = {}): TreePosition {
+  return { position_id: "p", fen: START, side_to_move: "white", in_book: true, in_reference: false, names,
+    reference: [], openings: [], evaluated: false, engine: null, moves, ...extra };
 }
 
 describe("tree model", () => {
@@ -25,14 +25,31 @@ describe("tree model", () => {
     const deeper = withPosition(tree, "e2e4", position([move("e7e5", "e5", "book")], ["King's Pawn"]));
     expect(deeper["e2e4 e7e5"].parent).toBe("e2e4");
     expect(pathTo("e2e4 e7e5")).toEqual([ROOT, "e2e4", "e2e4 e7e5"]);
-    expect(openingName(deeper, "e2e4 e7e5")).toBe("King's Pawn");
-    expect(openingName(tree, ROOT)).toBe(""); // every opening passes the start: no name
+    expect(openingName(deeper, "e2e4 e7e5")).toEqual({ name: "King's Pawn" });
+    expect(openingName(tree, ROOT)).toEqual({ name: "" }); // every opening passes the start: no name
+    const named = withPosition(deeper, "e2e4 e7e5", position([], ["Researched name"], {
+      reference: [{ eco: "C20", name: "King's Pawn Game" }] }));
+    expect(openingName(named, "e2e4 e7e5")).toEqual({ eco: "C20", name: "King's Pawn Game" }); // the standard name wins
   });
 
   it("hides weaker and poor moves unless asked, or unless they are on the current path", () => {
     expect(visibleChildren(tree, ROOT, false, new Set()).map((n) => n.id)).toEqual(["e2e4", "d2d4"]);
     expect(visibleChildren(tree, ROOT, true, new Set())).toHaveLength(3);
     expect(visibleChildren(tree, ROOT, false, new Set(["g2g4"]))).toHaveLength(3);
+  });
+
+  it("shows named sidelines the engine rates good, or all of them where it has not looked", () => {
+    const moves = [
+      move("e2e4", "e4", "book"),
+      move("d2d4", "d4", "reference", { engine_quality: "good" }),
+      move("b2b4", "b4", "reference", { engine_quality: "poor" }),
+      move("a2a3", "a3", "reference"),
+    ];
+    const rated = withPosition(emptyTree(START), ROOT, position(moves, [], { evaluated: true }));
+    expect(visibleChildren(rated, ROOT, false, new Set()).map((n) => n.id)).toEqual(["e2e4", "d2d4"]);
+    expect(visibleChildren(rated, ROOT, true, new Set())).toHaveLength(4);
+    const unrated = withPosition(emptyTree(START), ROOT, position(moves));
+    expect(visibleChildren(unrated, ROOT, false, new Set()).map((n) => n.id)).toEqual(["e2e4", "d2d4", "a2a3"]);
   });
 
   it("lays out only the visible tree, top-down", () => {

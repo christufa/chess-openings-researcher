@@ -7,6 +7,7 @@ type MoveNodeData = { node: TreeNode; current: boolean; onPath: boolean };
 
 const RING: Record<string, string> = {
   book: "border-book",
+  reference: "border-reference",
   good: "border-line",
   weaker: "border-weaker border-dashed",
   poor: "border-poor border-dashed",
@@ -21,7 +22,10 @@ const MoveNode = memo(function MoveNode({ data }: NodeProps<Node<MoveNodeData>>)
     ? "border-accent bg-accent/15 text-strong ring-2 ring-accent/40"
     : `${RING[quality]} ${onPath ? "bg-raised text-strong" : "bg-panel"}`;
   return (
-    <div className={`w-[72px] rounded-lg border px-2 py-1 text-center ${base}`} title={move?.lines.join(", ")}>
+    <div
+      className={`w-[72px] rounded-lg border px-2 py-1 text-center ${base}`}
+      title={move ? (move.lines.length ? move.lines.join(", ") : move.reference ? "Named variation, not researched yet" : undefined) : undefined}
+    >
       <Handle type="target" position={Position.Top} className="!opacity-0" />
       {move ? (
         <>

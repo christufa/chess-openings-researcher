@@ -1,12 +1,14 @@
 // The explorer API (src/openings_research/api.py). Read-only and rate-limited per client.
 
+// "reference": a named variation (the reference book) that no research covers yet.
 // "explored" is client-only: a move played on the board that neither the book nor the engine offered.
-export type Quality = "book" | "good" | "weaker" | "poor" | "explored";
+export type Quality = "book" | "reference" | "good" | "weaker" | "poor" | "explored";
 
 export interface TreeMove {
   uci: string;
   san: string;
-  book: boolean;
+  book: boolean; // researched lines play it
+  reference: boolean; // a named variation plays it
   fen: string;
   openings: string[];
   lines: string[];
@@ -23,11 +25,22 @@ export interface TreePosition {
   fen: string;
   side_to_move: "white" | "black";
   in_book: boolean;
-  names: string[];
+  in_reference: boolean;
+  names: string[]; // researched lines ending here
+  reference: Variation[]; // named variations ending here
   openings: string[];
   evaluated: boolean;
   engine: { name: string; version: string; depth: number } | null;
   moves: TreeMove[];
+}
+
+export interface Variation {
+  eco: string;
+  name: string;
+}
+
+export interface NamedLine extends Variation {
+  moves_uci: string[];
 }
 
 export interface Opening {
@@ -74,6 +87,8 @@ export const fullFen = (fen: string) => (fen.split(" ").length === 4 ? `${fen} 0
 export const api = {
   tree: (fen?: string) =>
     get<TreePosition>(fen ? `/api/v1/tree?fen=${encodeURIComponent(fullFen(fen))}` : "/api/v1/tree"),
+  names: (q: string) =>
+    get<{ items: NamedLine[] }>(`/api/v1/names?q=${encodeURIComponent(q)}&limit=8`).then((r) => r.items),
   openings: () => get<{ items: Opening[] }>("/api/v1/openings?limit=100").then((r) => r.items),
   claims: (runId: string) =>
     get<{ items: Claim[] }>(`/api/v1/runs/${encodeURIComponent(runId)}/claims?limit=100`).then((r) => r.items),

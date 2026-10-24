@@ -65,7 +65,7 @@ export default function App() {
       const made = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? "q" });
       const fen = game.fen().split(" ").slice(0, 4).join(" ");
       const move: TreeMove = {
-        uci, san: made.san, book: false, fen, openings: [], lines: [], continues: false,
+        uci, san: made.san, book: false, reference: false, fen, openings: [], lines: [], continues: false,
         quality: "explored", engine_quality: null, score_cp: null, mate: null, loss_cp: null,
       };
       const next: Tree = {
@@ -80,14 +80,11 @@ export default function App() {
     [current, select],
   );
 
-  /** Jump to an opening: walk its shortest researched line, loading each step. */
+  /** Jump along a line of moves from the start, loading each step. */
   const jump = useCallback(
-    async (opening: Opening) => {
-      const lines = await api.lines(opening.run_id);
-      if (!lines.length) return;
-      const line = lines.reduce((a, b) => (b.moves_uci.length < a.moves_uci.length ? b : a));
+    async (movesUci: string[]) => {
       let id = ROOT;
-      for (const uci of line.moves_uci) {
+      for (const uci of movesUci) {
         const loaded = await load(id);
         const next = childId(id, uci);
         if (!loaded[next]) break;
@@ -130,7 +127,8 @@ export default function App() {
       <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2">
         <h1 className="text-base font-medium text-strong">Openings research</h1>
         <nav className="min-w-0 flex-1 truncate text-sm text-muted" aria-label="Current line">
-          {name && <span className="mr-2 text-strong">{name}</span>}
+          {name.eco && <span className="mr-1.5 font-mono text-xs text-reference">{name.eco}</span>}
+          {name.name && <span className="mr-2 text-strong">{name.name}</span>}
           <span className="font-mono">
             {moves.map((m, i) => (
               <button key={m.id} className="mr-1 hover:text-strong" onClick={() => select(m.id)}>
@@ -140,10 +138,10 @@ export default function App() {
             ))}
           </span>
         </nav>
-        <OpeningSearch openings={openings} onPick={(o) => void jump(o)} />
-        <label className="flex items-center gap-2 text-sm">
+        <OpeningSearch openings={openings} onPick={(moves) => void jump(moves)} />
+        <label className="flex items-center gap-2 text-sm" title="Weaker moves and named sidelines">
           <input type="checkbox" checked={showWeaker} onChange={(e) => setShowWeaker(e.target.checked)} />
-          Weaker moves
+          More moves
         </label>
         <button
           className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-panel"
@@ -184,6 +182,7 @@ export default function App() {
             <span>
               <BookIcon className="text-book" /> book
             </span>
+            <span className="text-reference">named</span>
             <span className="text-weaker">- - weaker</span>
             <span className="text-poor">- - poor</span>
             <span className="hidden lg:inline">arrow keys move through the tree</span>

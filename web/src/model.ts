@@ -34,13 +34,22 @@ export function withPosition(tree: Tree, id: string, position: TreePosition): Tr
   return next;
 }
 
-const SHOWN: Record<Quality, boolean> = { book: true, good: true, weaker: false, poor: false, explored: true };
+const SHOWN: Record<Quality, boolean> = { book: true, reference: true, good: true, weaker: false, poor: false, explored: true };
 
-/** Book and good moves always; weaker and poor ones only when asked for (or when on the path). */
+/** Whether a move shows without "More moves": researched and good ones always; named
+ *  variations when the engine rates them good, or when it has not looked at the position
+ *  (it rates its top moves only, so an unrated sideline of a rated position is not among them). */
+function shown(move: TreeMove, parent?: TreePosition): boolean {
+  if (move.quality !== "reference") return SHOWN[move.quality];
+  return move.engine_quality === "good" || (move.engine_quality === null && !parent?.evaluated);
+}
+
+/** Book and good moves always; weaker ones and sidelines only when asked for (or when on the path). */
 export function visibleChildren(tree: Tree, id: string, showWeaker: boolean, path: Set<string>): TreeNode[] {
+  const parent = tree[id]?.position;
   return (tree[id]?.children ?? [])
     .map((cid) => tree[cid])
-    .filter((c) => c && (showWeaker || path.has(c.id) || (c.move && SHOWN[c.move.quality])));
+    .filter((c) => c && (showWeaker || path.has(c.id) || (c.move && shown(c.move, parent))));
 }
 
 /** Node ids from the start to `id`, inclusive. */
@@ -63,16 +72,17 @@ export function layout(tree: Tree, showWeaker: boolean, current: string, gap = {
   return root.descendants().map((d) => ({ node: d.data, x: d.x ?? 0, y: d.y ?? 0 }));
 }
 
-/** The opening name for a node: the deepest position on its path where a researched line
- *  ends, or the deepest one that only a single opening passes through. */
-export function openingName(tree: Tree, id: string): string {
+/** The opening name for a node: the deepest position on its path that a named variation
+ *  (with its ECO code) or a researched line ends at, or that only one opening passes through. */
+export function openingName(tree: Tree, id: string): { name: string; eco?: string } {
   const path = pathTo(id);
   for (let i = path.length - 1; i >= 0; i--) {
     const position = tree[path[i]]?.position;
-    if (position?.names.length) return position.names[0];
-    if (position?.openings.length === 1) return position.openings[0];
+    if (position?.reference.length) return position.reference[0];
+    if (position?.names.length) return { name: position.names[0] };
+    if (position?.openings.length === 1) return { name: position.openings[0] };
   }
-  return "";
+  return { name: "" };
 }
 
 export function moveNumberLabel(node: TreeNode): string {

@@ -51,6 +51,37 @@ def test_positions_outside_the_book_and_bad_input():
             tree.lookup(bad)
 
 
+def test_reference_variations_name_positions_and_rank_after_research():
+    from openings_research.tree import rank_moves
+
+    reference = [
+        {"eco": "C50", "name": "Italian Game", "moves_uci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]},
+        {"eco": "C60", "name": "Ruy Lopez", "moves_uci": ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]},
+        {"eco": "C44", "name": "Scotch Game", "moves_uci": ["e2e4", "e7e5", "g1f3", "b8c6", "d2d4"]},
+    ]
+    tree = BookTree([line("Italian Game", "Giuoco Piano", "e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5")], reference)
+    after_nc6 = tree.lookup("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")
+    assert [(m["san"], m["book"], m["reference"]) for m in after_nc6["moves"]] == [
+        ("Bc4", True, True), ("Bb5", False, True), ("d4", False, True)]
+    ruy = tree.lookup(after_nc6["moves"][1]["fen"])
+    assert ruy["reference"] == [{"eco": "C60", "name": "Ruy Lopez"}] and not ruy["in_book"] and ruy["in_reference"]
+    ranked = rank_moves(after_nc6, [ev("d2d4", "d4", 40), ev("f1b5", "Bb5", 30, rank=2), ev("h2h3", "h3", 10, rank=3)])
+    assert [(m["san"], m["quality"]) for m in ranked["moves"]] == [
+        ("Bc4", "book"), ("d4", "reference"), ("Bb5", "reference"), ("h3", "good")]
+    assert tree.lookup("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")["in_book"]
+
+
+def test_the_packaged_reference_book_parses():
+    from openings_research.reference import reference_lines, search
+
+    lines = reference_lines()
+    assert len(lines) > 3000 and all(line["moves_uci"] for line in lines)
+    assert search("ruy lopez berlin")[0]["eco"] == "C65"
+    english = [(v["eco"], v["name"]) for v in search("najdorf english attack", 50)]
+    assert len(english) == len(set(english))  # once per name, though listed under several move orders
+    assert search("   ") == []
+
+
 def test_smoke_fixtures_stay_out_of_the_book():
     store = MemoryStore()
     execute_all(Pipeline(store, "smoke", config()))  # the fixture opening is "__smoke_italian__"
@@ -64,10 +95,17 @@ def test_tree_endpoint_serves_published_lines():
     store.upsert("research_runs", [{**r, "opening": "Italian Game"} for r in store.read("research_runs")])
     with TestClient(create_app(ResearchReader(memory_reader(store)))) as client:
         root = client.get("/api/v1/tree").json()
-        assert [m["san"] for m in root["moves"]] == ["e4"] and root["moves"][0]["book"]
+        assert [m["san"] for m in root["moves"] if m["book"]] == ["e4"] and root["moves"][0]["san"] == "e4"
+        assert len(root["moves"]) == 20 and all(m["reference"] for m in root["moves"])  # every first move is named
         fen = root["moves"][0]["fen"]
-        assert client.get("/api/v1/tree", params={"fen": fen}).json()["moves"][0]["san"] == "e5"
+        after_e4 = client.get("/api/v1/tree", params={"fen": fen}).json()
+        assert after_e4["moves"][0]["san"] == "e5" and after_e4["reference"] == [{"eco": "B00", "name": "King's Pawn Game"}]
         assert client.get("/api/v1/tree", params={"fen": "not a fen at all"}).status_code == 400
+        found = client.get("/api/v1/names", params={"q": "najdorf english attack"}).json()
+        assert found["items"][0]["name"] == "Sicilian Defense: Najdorf Variation, English Attack"
+        assert found["items"][0]["moves_uci"][-1] == "c1e3" and found["source"].startswith("lichess-org/chess-openings@")
+        assert client.get("/api/v1/names", params={"q": "B90"}).json()["items"][0]["eco"] == "B90"
+        assert client.get("/api/v1/names", params={"q": "x"}).status_code == 422
 
 
 def ev(uci, san, cp=None, mate=None, rank=1, depth=20):
