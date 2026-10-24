@@ -1,45 +1,53 @@
-import { type Edge, Handle, type Node, type NodeProps, Position, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
+import {
+  Background, BackgroundVariant, Controls, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow, useReactFlow, useStore,
+} from "@xyflow/react";
 import { memo, useEffect, useMemo } from "react";
-import { BookIcon } from "./BookIcon";
 import { layout, moveNumberLabel, pathTo, ROOT, scoreLabel, type Tree, type TreeNode, visibleChildren } from "../model";
 
 type MoveNodeData = { node: TreeNode; current: boolean; onPath: boolean };
 
-const RING: Record<string, string> = {
-  book: "border-book",
-  reference: "border-reference",
-  good: "border-line",
-  weaker: "border-weaker border-dashed",
-  poor: "border-poor border-dashed",
-  explored: "border-muted border-dotted",
+// The dot says where a move comes from; weaker and poor ones also get a dashed outline.
+const DOT: Record<string, string> = {
+  book: "bg-book",
+  reference: "bg-reference",
+  good: "bg-accent",
+  weaker: "bg-weaker",
+  poor: "bg-poor",
+  explored: "bg-muted",
+};
+const OUTLINE: Record<string, string> = {
+  weaker: "border-dashed border-weaker/60",
+  poor: "border-dashed border-poor/60",
+  explored: "border-dotted border-muted/60",
 };
 
 const MoveNode = memo(function MoveNode({ data }: NodeProps<Node<MoveNodeData>>) {
   const { node, current, onPath } = data;
   const move = node.move;
   const quality = move?.quality ?? "book";
-  const base = current
-    ? "border-accent bg-accent/15 text-strong ring-2 ring-accent/40"
-    : `${RING[quality]} ${onPath ? "bg-raised text-strong" : "bg-panel"}`;
+  const frame = current
+    ? "border-accent bg-accent/20 text-strong shadow-[0_0_0_4px_rgb(109_140_255/0.18),0_8px_24px_rgb(0_0_0/0.45)]"
+    : `${OUTLINE[quality] ?? (onPath ? "border-accent/40" : "border-line")} ${onPath ? "bg-raised text-strong" : "bg-panel text-text"} shadow-[0_4px_14px_rgb(0_0_0/0.35)] hover:border-accent/60`;
+  const score = scoreLabel(node);
   return (
     <div
-      className={`w-[72px] rounded-lg border px-2 py-1 text-center ${base}`}
+      className={`w-[76px] cursor-pointer rounded-xl border px-2 py-1.5 transition-colors ${frame}`}
       title={move ? (move.lines.length ? move.lines.join(", ") : move.reference ? "Named variation, not researched yet" : undefined) : undefined}
     >
       <Handle type="target" position={Position.Top} className="!opacity-0" />
       {move ? (
         <>
-          <div className="text-[10px] leading-none text-muted">{moveNumberLabel(node)}</div>
-          <div className="flex items-center justify-center gap-1 font-mono text-sm leading-tight">
-            {move.book && <BookIcon className="text-book" />}
-            {move.san}
+          <div className="flex items-center justify-between text-[10px] leading-none text-muted">
+            <span>{moveNumberLabel(node)}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${DOT[quality]}`} aria-label={quality} />
           </div>
-          <div className={`text-[10px] leading-none ${quality === "weaker" ? "text-weaker" : quality === "poor" ? "text-poor" : "text-muted"}`}>
-            {scoreLabel(node) || " "}
+          <div className="mt-0.5 font-mono text-[13px] font-semibold leading-tight">{move.san}</div>
+          <div className={`mt-0.5 text-[10px] leading-none tabular-nums ${quality === "weaker" ? "text-weaker" : quality === "poor" ? "text-poor" : "text-muted"}`}>
+            {score || " "}
           </div>
         </>
       ) : (
-        <div className="py-1 text-xs text-strong">Start</div>
+        <div className="py-1.5 text-center text-xs font-medium text-strong">Start</div>
       )}
       <Handle type="source" position={Position.Bottom} className="!opacity-0" />
     </div>
@@ -47,8 +55,8 @@ const MoveNode = memo(function MoveNode({ data }: NodeProps<Node<MoveNodeData>>)
 });
 
 const nodeTypes = { move: MoveNode };
-const NODE_W = 72;
-const NODE_H = 46;
+const NODE_W = 76;
+const NODE_H = 52;
 
 interface Props {
   tree: Tree;
@@ -74,13 +82,14 @@ export function TreeView({ tree, current, showWeaker, onSelect }: Props) {
     .filter(({ node }) => node.parent !== null)
     .map(({ node }) => {
       const quality = node.move?.quality ?? "book";
-      const stroke = path.has(node.id) ? "#3692e7" : quality === "weaker" ? "#d59020" : quality === "poor" ? "#d64f4f" : "#5c5a57";
+      const stroke = path.has(node.id) ? "#6d8cff" : quality === "weaker" ? "#f5b14c99" : quality === "poor" ? "#f8717199" : "#3a4150";
       return {
         id: `e:${node.id}`,
         source: node.parent || "start",
         target: node.id,
         type: "smoothstep",
-        style: { stroke, strokeWidth: path.has(node.id) ? 2 : 1, strokeDasharray: quality === "weaker" || quality === "poor" ? "5 4" : undefined },
+        pathOptions: { borderRadius: 14 },
+        style: { stroke, strokeWidth: path.has(node.id) ? 2.25 : 1.25, strokeDasharray: quality === "weaker" || quality === "poor" ? "5 4" : undefined },
       };
     });
 
@@ -124,6 +133,9 @@ export function TreeView({ tree, current, showWeaker, onSelect }: Props) {
       maxZoom={2}
       proOptions={{ hideAttribution: false }}
       colorMode="dark"
-    />
+    >
+      <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#2a2f3a" />
+      <Controls position="bottom-right" showInteractive={false} />
+    </ReactFlow>
   );
 }

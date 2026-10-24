@@ -24,6 +24,7 @@ class BookMove:
     openings: set[str] = field(default_factory=set)
     lines: set[str] = field(default_factory=set)  # names of researched lines that play this move
     reference: bool = False  # a named variation plays this move
+    variations: int = 0  # how many named variations go through this move (a popularity proxy)
 
 
 @dataclass
@@ -59,7 +60,9 @@ class BookTree:
                 san = board.san(move)
                 board.push(move)
                 child = self._position(board)
-                node.moves.setdefault(uci, BookMove(uci, san, child.position_id, child.fen)).reference = True
+                edge = node.moves.setdefault(uci, BookMove(uci, san, child.position_id, child.fen))
+                edge.reference = True
+                edge.variations += 1
                 node = child
             node.reference.append({"eco": variation["eco"], "name": variation["name"]})
         for line in lines:
@@ -94,7 +97,7 @@ class BookTree:
         node = self.positions.get(record["position_id"])
         moves = sorted(
             node.moves.values() if node else [],
-            key=lambda m: (-len(m.lines), -len(m.openings), not m.reference, m.san),  # most-researched first
+            key=lambda m: (-len(m.lines), -len(m.openings), -m.variations, m.san),  # most-researched first
         )
         return {
             "position_id": record["position_id"],
@@ -111,6 +114,7 @@ class BookTree:
                     "san": m.san,
                     "book": bool(m.lines),
                     "reference": m.reference,
+                    "variations": m.variations,
                     "fen": m.to_fen,
                     "openings": sorted(m.openings),
                     "lines": sorted(m.lines),
@@ -166,7 +170,7 @@ def rank_moves(position: dict, evaluations: list[dict]) -> dict:
         group, label = (book, "book") if move["book"] else (reference, "reference")
         group.append({**move, **evaluation, "quality": label, "engine_quality": quality})
     book.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, -len(m["lines"])))
-    reference.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, m["san"]))
+    reference.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, -m["variations"], m["san"]))
 
     board = board_for(position["fen"])
     engine = []
@@ -180,7 +184,8 @@ def rank_moves(position: dict, evaluations: list[dict]) -> dict:
         after = board.copy(stack=False)
         after.push(move)
         engine.append({
-            "uci": uci, "san": row["move_san"], "book": False, "reference": False, "fen": position_record(after)["normalized_fen"],
+            "uci": uci, "san": row["move_san"], "book": False, "reference": False, "variations": 0,
+            "fen": position_record(after)["normalized_fen"],
             "openings": [], "lines": [], "continues": False, **evaluation, "quality": quality, "engine_quality": quality,
         })
     order = {"good": 0, "weaker": 1, "poor": 2}

@@ -9,6 +9,7 @@ export interface TreeMove {
   san: string;
   book: boolean; // researched lines play it
   reference: boolean; // a named variation plays it
+  variations: number; // named variations through it
   fen: string;
   openings: string[];
   lines: string[];
@@ -88,7 +89,7 @@ export const api = {
   tree: (fen?: string) =>
     get<TreePosition>(fen ? `/api/v1/tree?fen=${encodeURIComponent(fullFen(fen))}` : "/api/v1/tree"),
   names: (q: string) =>
-    get<{ items: NamedLine[] }>(`/api/v1/names?q=${encodeURIComponent(q)}&limit=8`).then((r) => r.items),
+    get<{ items: NamedLine[] }>(`/api/v1/names?q=${encodeURIComponent(q)}&limit=30`).then((r) => r.items),
   openings: () => get<{ items: Opening[] }>("/api/v1/openings?limit=100").then((r) => r.items),
   claims: (runId: string) =>
     get<{ items: Claim[] }>(`/api/v1/runs/${encodeURIComponent(runId)}/claims?limit=100`).then((r) => r.items),

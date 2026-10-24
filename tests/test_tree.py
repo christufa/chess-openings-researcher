@@ -63,6 +63,8 @@ def test_reference_variations_name_positions_and_rank_after_research():
     after_nc6 = tree.lookup("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")
     assert [(m["san"], m["book"], m["reference"]) for m in after_nc6["moves"]] == [
         ("Bc4", True, True), ("Bb5", False, True), ("d4", False, True)]
+    assert [m["variations"] for m in after_nc6["moves"]] == [1, 1, 1]
+    assert tree.lookup(START_FEN)["moves"][0]["variations"] == 3  # all three named lines start 1.e4
     ruy = tree.lookup(after_nc6["moves"][1]["fen"])
     assert ruy["reference"] == [{"eco": "C60", "name": "Ruy Lopez"}] and not ruy["in_book"] and ruy["in_reference"]
     ranked = rank_moves(after_nc6, [ev("d2d4", "d4", 40), ev("f1b5", "Bb5", 30, rank=2), ev("h2h3", "h3", 10, rank=3)])

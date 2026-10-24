@@ -2,12 +2,11 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, fullFen, type Opening, type TreeMove } from "./api";
-import { Board } from "./components/Board";
-import { BookIcon } from "./components/BookIcon";
-import { OpeningSearch } from "./components/OpeningSearch";
+import { Board, type BoardArrow, evalText } from "./components/Board";
+import { GoTo } from "./components/GoTo";
 import { ResearchPanel } from "./components/ResearchPanel";
 import { TreeView } from "./components/TreeView";
-import { childId, emptyTree, openingName, pathTo, ROOT, type Tree, visibleChildren, withPosition } from "./model";
+import { childId, emptyTree, openingName, pathTo, positionEval, ROOT, type Tree, visibleChildren, withPosition } from "./model";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -";
 
@@ -16,6 +15,7 @@ export default function App() {
   const [current, setCurrent] = useState(ROOT);
   const [showWeaker, setShowWeaker] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [palette, setPalette] = useState(false);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [error, setError] = useState("");
@@ -65,7 +65,7 @@ export default function App() {
       const made = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? "q" });
       const fen = game.fen().split(" ").slice(0, 4).join(" ");
       const move: TreeMove = {
-        uci, san: made.san, book: false, reference: false, fen, openings: [], lines: [], continues: false,
+        uci, san: made.san, book: false, reference: false, variations: 0, fen, openings: [], lines: [], continues: false,
         quality: "explored", engine_quality: null, score_cp: null, mate: null, loss_cp: null,
       };
       const next: Tree = {
@@ -97,6 +97,11 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !(e.target instanceof HTMLInputElement))) {
+        e.preventDefault();
+        setPalette(true);
+        return;
+      }
       if (e.target instanceof HTMLInputElement) return;
       const t = treeRef.current;
       const node = t[current];
@@ -121,74 +126,115 @@ export default function App() {
     .slice(1)
     .map((id) => tree[id]);
   const name = openingName(tree, current);
+  const evaluation = positionEval(node.position);
+  const arrows: BoardArrow[] = visibleChildren(tree, current, showWeaker, new Set())
+    .filter((c) => c.move && c.move.quality !== "explored")
+    .slice(0, 4)
+    .map((c) => ({ uci: c.move!.uci, kind: c.move!.book ? "book" : c.move!.quality === "reference" ? "reference" : "engine" }));
+  const engine = node.position?.engine;
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2">
-        <h1 className="text-base font-medium text-strong">Openings research</h1>
-        <nav className="min-w-0 flex-1 truncate text-sm text-muted" aria-label="Current line">
-          {name.eco && <span className="mr-1.5 font-mono text-xs text-reference">{name.eco}</span>}
-          {name.name && <span className="mr-2 text-strong">{name.name}</span>}
-          <span className="font-mono">
-            {moves.map((m, i) => (
-              <button key={m.id} className="mr-1 hover:text-strong" onClick={() => select(m.id)}>
-                {i % 2 === 0 ? `${i / 2 + 1}.` : ""}
-                {m.move?.san}
-              </button>
-            ))}
+      <header className="z-20 flex items-center gap-3 border-b border-line/70 bg-page/70 px-4 py-2.5 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-accent to-reference text-sm text-white shadow-lg shadow-accent/20" aria-hidden>
+            ♞
           </span>
-        </nav>
-        <OpeningSearch openings={openings} onPick={(moves) => void jump(moves)} />
-        <label className="flex items-center gap-2 text-sm" title="Weaker moves and named sidelines">
-          <input type="checkbox" checked={showWeaker} onChange={(e) => setShowWeaker(e.target.checked)} />
-          More moves
-        </label>
+          <h1 className="hidden text-[15px] font-semibold tracking-tight text-strong sm:block">Openings</h1>
+        </div>
         <button
-          className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-panel"
+          className="mx-auto flex h-9 w-full max-w-md items-center gap-2 rounded-xl border border-line bg-panel/80 px-3 text-sm text-muted transition hover:border-accent/50 hover:text-text"
+          onClick={() => setPalette(true)}
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <span className="flex-1 truncate text-left">Go to an opening…</span>
+          <kbd className="hidden rounded border border-line px-1.5 text-[10px] sm:inline">Ctrl K</kbd>
+        </button>
+        <div className="flex rounded-xl border border-line bg-panel/80 p-0.5 text-xs" role="group" aria-label="Moves shown">
+          {[false, true].map((all) => (
+            <button
+              key={String(all)}
+              aria-pressed={showWeaker === all}
+              title={all ? "Also weaker moves and named sidelines" : "Book and good moves"}
+              className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 transition ${showWeaker === all ? "bg-raised text-strong shadow" : "text-muted hover:text-text"}`}
+              onClick={() => setShowWeaker(all)}
+            >
+              {all ? "All moves" : "Main"}
+            </button>
+          ))}
+        </div>
+        <button
+          className={`hidden rounded-xl border border-line px-3 py-1.5 text-xs transition sm:block ${focus ? "bg-raised text-strong" : "bg-panel/80 text-muted hover:text-text"}`}
+          aria-pressed={focus}
           onClick={() => setFocus(!focus)}
         >
-          {focus ? "Show research" : "Focus"}
+          Focus
         </button>
       </header>
       {error && <p className="bg-poor/15 px-4 py-2 text-sm text-poor">{error}</p>}
       {/* Narrow screens scroll the page (board, then tree, then research); wide ones split it. */}
-      <main className="grid flex-1 grid-cols-1 overflow-y-auto lg:min-h-0 lg:grid-cols-[minmax(320px,560px)_1fr] lg:overflow-hidden">
-        <section className="border-line p-4 lg:min-h-0 lg:overflow-y-auto lg:border-r">
-          <Board fen={node.fen} lastMove={node.move?.uci} orientation={orientation} onMove={play} />
-          <div className="mt-2 flex items-center justify-between text-xs text-muted">
-            <span>
-              {node.position?.engine
-                ? `${node.position.engine.name} ${node.position.engine.version}, depth ${node.position.engine.depth}`
-                : "No engine evaluation for this position yet"}
+      <main className="grid flex-1 grid-cols-1 overflow-y-auto lg:min-h-0 lg:grid-cols-[minmax(340px,580px)_1fr] lg:overflow-hidden">
+        <section className="space-y-4 p-4 lg:min-h-0 lg:overflow-y-auto">
+          <nav className="rounded-2xl border border-line bg-panel/70 p-3" aria-label="Current line">
+            <div className="flex min-h-6 items-center gap-2">
+              {name.eco && <span className="rounded-md bg-reference/15 px-1.5 py-0.5 font-mono text-[11px] text-reference">{name.eco}</span>}
+              <span className="truncate text-[15px] font-medium text-strong">{name.name || "Starting position"}</span>
+            </div>
+            {moves.length === 0 && <p className="mt-1.5 text-xs text-muted">Play a move on the board, or pick one in the tree.</p>}
+            <div className="mt-2 flex flex-wrap gap-1 font-mono text-[12px] empty:hidden">
+              {moves.map((m, i) => (
+                <button
+                  key={m.id}
+                  className={`rounded-md px-1.5 py-0.5 transition ${m.id === current ? "bg-accent/20 text-strong" : "text-muted hover:bg-raised hover:text-text"}`}
+                  onClick={() => select(m.id)}
+                >
+                  {i % 2 === 0 && <span className="mr-0.5 text-muted/70">{i / 2 + 1}.</span>}
+                  {m.move?.san}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <Board fen={node.fen} lastMove={node.move?.uci} orientation={orientation} arrows={arrows} evaluation={evaluation} onMove={play} />
+          <div className="flex items-center gap-3 px-5 text-xs text-muted">
+            {evaluation && <span className="rounded-md bg-raised px-1.5 py-0.5 font-mono text-text">{evalText(evaluation)}</span>}
+            <span className="flex-1 truncate">
+              {engine ? `${engine.name} ${engine.version} · depth ${engine.depth}` : "No engine evaluation for this position yet"}
             </span>
             <button
-              className="hover:text-strong"
-              onClick={() => setOrientation(orientation === "white" ? "black" : "white")}
+              className="rounded-md px-2 py-1 hover:bg-raised hover:text-strong"
+              onClick={() => node.parent !== null && select(node.parent)}
+              disabled={node.parent === null}
+              aria-label="Previous move"
             >
-              Flip board
+              ←
+            </button>
+            <button className="rounded-md px-2 py-1 hover:bg-raised hover:text-strong" onClick={() => setOrientation(orientation === "white" ? "black" : "white")}>
+              Flip
             </button>
           </div>
           {!focus && (
-            <div className="mt-4">
+            <div className="rounded-2xl border border-line bg-panel/70 p-4">
               <ResearchPanel position={node.position} openings={openings} />
             </div>
           )}
         </section>
-        <section className="relative h-[60vh] border-t border-line lg:h-auto lg:min-h-0 lg:border-t-0" aria-label="Move tree">
+        <section className="relative h-[60vh] border-t border-line lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l" aria-label="Move tree">
           <ReactFlowProvider>
             <TreeView tree={tree} current={current} showWeaker={showWeaker} onSelect={select} />
           </ReactFlowProvider>
-          <div className="pointer-events-none absolute bottom-3 left-3 flex gap-3 rounded-md bg-page/80 px-2 py-1 text-[11px] text-muted">
-            <span>
-              <BookIcon className="text-book" /> book
-            </span>
-            <span className="text-reference">named</span>
-            <span className="text-weaker">- - weaker</span>
-            <span className="text-poor">- - poor</span>
-            <span className="hidden lg:inline">arrow keys move through the tree</span>
+          <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-panel/80 px-3 py-1.5 text-[11px] text-muted backdrop-blur">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-book" />book</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-reference" />named</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent" />engine</span>
+            <span className="flex items-center gap-1.5"><span className="h-0 w-3 border-t border-dashed border-weaker" />weaker</span>
+            <span className="flex items-center gap-1.5"><span className="h-0 w-3 border-t border-dashed border-poor" />poor</span>
+            <span className="hidden lg:inline">· arrow keys to move</span>
           </div>
         </section>
       </main>
+      <GoTo open={palette} openings={openings} onClose={() => setPalette(false)} onPick={(m) => void jump(m)} />
     </div>
   );
 }
