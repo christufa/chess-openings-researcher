@@ -29,6 +29,12 @@ with sync_playwright() as p:
     nav = page.get_by_label("Current line")
     expect(nav).to_contain_text("Bc4")
     expect(nav).to_contain_text("Italian Game")
+    # The go-to palette finds named variations and jumps the board and tree there.
+    page.keyboard.press("Control+k")
+    page.get_by_label("Opening, variation or ECO code").fill("berlin defense")
+    page.get_by_role("option", name="Ruy Lopez: Berlin Defense").first.click()
+    expect(nav).to_contain_text("C65")
+    expect(nav).to_contain_text("Nf6")
     Path(".cache").mkdir(exist_ok=True)
     page.screenshot(path=".cache/explorer-desktop.png")
     page.set_viewport_size({"width": 390, "height": 844})
@@ -37,4 +43,4 @@ with sync_playwright() as p:
     page.screenshot(path=".cache/explorer-mobile.png", full_page=True)
     assert not errors, errors
     browser.close()
-    print("Browser smoke passed: tree, claims and evidence, keyboard walk, opening name, mobile width, no JS errors")
+    print("Browser smoke passed: tree, claims and evidence, keyboard walk, opening name, go-to palette, mobile width, no JS errors")

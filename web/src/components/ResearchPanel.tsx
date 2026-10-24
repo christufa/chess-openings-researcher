@@ -33,7 +33,13 @@ export function ResearchPanel({ position, openings }: Props) {
 
   if (!position) return null;
   if (!runs.length) {
-    return <p className="text-sm text-muted">Out of book here: no researched opening reaches this position.</p>;
+    return (
+      <p className="text-sm text-muted">
+        {position.in_reference
+          ? "A named variation, but no researched opening reaches this position yet."
+          : "Out of book here: no researched opening reaches this position."}
+      </p>
+    );
   }
   if (runs.length > 3) {
     return (

@@ -10,6 +10,9 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .reference import SOURCE as REFERENCE_SOURCE
+from .reference import reference_lines
+from .reference import search as search_reference
 from .serving import IcebergReader, ResearchReader, StoreUnavailable
 from .tree import START, BookTree, rank_moves
 
@@ -131,14 +134,20 @@ def create_app(reader=None, limiter=None):
 
     @app.get("/api/v1/tree")
     def tree(fen: Annotated[str, Query(min_length=10, max_length=100)] = START["normalized_fen"]):
-        """Book moves from a position: every researched line through it, merged across openings."""
+        """Book moves from a position: every researched line through it, merged across openings,
+        and the named variations of the reference book."""
         lines = reader.book_lines()
         key = hash(tuple((r["opening"], r["name"], r["start_fen"], tuple(r["moves_uci"])) for r in lines))
         if key not in books:
             books.clear()
-            books[key] = BookTree(lines)
+            books[key] = BookTree(lines, reference_lines())
         position = books[key].lookup(fen)
         return rank_moves(position, reader.evaluations(position["position_id"]))
+
+    @app.get("/api/v1/names")
+    def names(q: Annotated[str, Query(min_length=2, max_length=60)], limit: PageSize = 20):
+        """Named variations (ECO code or name words) from the reference book, shortest first."""
+        return {"items": search_reference(q, min(limit, 50)), "source": REFERENCE_SOURCE}
 
     @app.get("/api/v1/compare")
     def compare(before: RunID, after: RunID):

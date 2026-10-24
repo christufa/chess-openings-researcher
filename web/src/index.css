@@ -1,25 +1,40 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
-/* A dark theme in the spirit of lichess; one accent, and quality colors that also differ in
-   line style so they never depend on color alone. */
+/* A cool, quiet dark theme: one accent, and quality colors that also differ in shape or line
+   style so they never depend on color alone. System fonts only (nothing loads from a CDN). */
 @theme {
-  --color-page: #161512;
-  --color-panel: #262421;
-  --color-raised: #302e2c;
-  --color-line: #3c3a37;
-  --color-text: #bababa;
-  --color-strong: #e6e6e6;
-  --color-muted: #8a8784;
-  --color-accent: #3692e7;
-  --color-book: #4caf7d;
-  --color-weaker: #d59020;
-  --color-poor: #d64f4f;
-  --font-sans: "Noto Sans", system-ui, sans-serif;
+  --color-page: #0e1015;
+  --color-panel: #161920;
+  --color-raised: #1e222b;
+  --color-line: #2a2f3a;
+  --color-text: #c3c8d2;
+  --color-strong: #f2f4f7;
+  --color-muted: #818998;
+  --color-accent: #6d8cff;
+  --color-book: #34d399;
+  --color-reference: #a78bfa;
+  --color-weaker: #f5b14c;
+  --color-poor: #f87171;
+  --color-board-light: #e4e8ef;
+  --color-board-dark: #8492ab;
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
 }
 
 html, body, #root { height: 100%; }
-body { background: var(--color-page); color: var(--color-text); }
+body {
+  background: radial-gradient(1200px 600px at 70% -10%, #1a1f2e 0%, transparent 60%), var(--color-page);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
 
 /* Nodes slide to their new place when a branch opens, so the eye keeps its anchor. */
 .react-flow__node { transition: transform 300ms ease; }
+.react-flow { --xy-background-color: transparent; }
+.react-flow__controls { border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px rgb(0 0 0 / 0.35); }
+.react-flow__controls-button { background: var(--color-raised); border-color: var(--color-line); fill: var(--color-text); }
+.react-flow__controls-button:hover { background: var(--color-line); }
+
+@keyframes palette-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.palette-in { animation: palette-in 140ms ease-out; }

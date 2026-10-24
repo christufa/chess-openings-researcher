@@ -34,13 +34,33 @@ export function withPosition(tree: Tree, id: string, position: TreePosition): Tr
   return next;
 }
 
-const SHOWN: Record<Quality, boolean> = { book: true, good: true, weaker: false, poor: false, explored: true };
+const SHOWN: Record<Quality, boolean> = { book: true, reference: true, good: true, weaker: false, poor: false, explored: true };
 
-/** Book and good moves always; weaker and poor ones only when asked for (or when on the path). */
+export const UNRATED_NAMED_SHOWN = 4;
+
+/** Whether a move shows without "All moves": researched and good ones always; named
+ *  variations when the engine rates them good, or, where it has not looked at the position,
+ *  the few that most named variations go through (it rates its top moves only, so an unrated
+ *  sideline of a rated position is not among them). */
+function shown(move: TreeMove, parent: TreePosition | undefined, busiest: Set<string>): boolean {
+  if (move.quality !== "reference") return SHOWN[move.quality];
+  if (move.engine_quality !== null) return move.engine_quality === "good";
+  return !parent?.evaluated && busiest.has(move.uci);
+}
+
+/** Book and good moves always; weaker ones and sidelines only when asked for (or when on the path). */
 export function visibleChildren(tree: Tree, id: string, showWeaker: boolean, path: Set<string>): TreeNode[] {
-  return (tree[id]?.children ?? [])
-    .map((cid) => tree[cid])
-    .filter((c) => c && (showWeaker || path.has(c.id) || (c.move && SHOWN[c.move.quality])));
+  const parent = tree[id]?.position;
+  const children = (tree[id]?.children ?? []).map((cid) => tree[cid]).filter(Boolean);
+  const busiest = new Set(
+    children
+      .map((c) => c.move)
+      .filter((m): m is TreeMove => m?.quality === "reference" && m.engine_quality === null)
+      .sort((a, b) => b.variations - a.variations)
+      .slice(0, UNRATED_NAMED_SHOWN)
+      .map((m) => m.uci),
+  );
+  return children.filter((c) => showWeaker || path.has(c.id) || (c.move && shown(c.move, parent, busiest)));
 }
 
 /** Node ids from the start to `id`, inclusive. */
@@ -63,16 +83,17 @@ export function layout(tree: Tree, showWeaker: boolean, current: string, gap = {
   return root.descendants().map((d) => ({ node: d.data, x: d.x ?? 0, y: d.y ?? 0 }));
 }
 
-/** The opening name for a node: the deepest position on its path where a researched line
- *  ends, or the deepest one that only a single opening passes through. */
-export function openingName(tree: Tree, id: string): string {
+/** The opening name for a node: the deepest position on its path that a named variation
+ *  (with its ECO code) or a researched line ends at, or that only one opening passes through. */
+export function openingName(tree: Tree, id: string): { name: string; eco?: string } {
   const path = pathTo(id);
   for (let i = path.length - 1; i >= 0; i--) {
     const position = tree[path[i]]?.position;
-    if (position?.names.length) return position.names[0];
-    if (position?.openings.length === 1) return position.openings[0];
+    if (position?.reference.length) return position.reference[0];
+    if (position?.names.length) return { name: position.names[0] };
+    if (position?.openings.length === 1) return { name: position.openings[0] };
   }
-  return "";
+  return { name: "" };
 }
 
 export function moveNumberLabel(node: TreeNode): string {
@@ -91,4 +112,22 @@ export function scoreLabel(node: TreeNode): string {
   if (move.score_cp === null) return "";
   const pawns = (sign * move.score_cp) / 100;
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(1)}`;
+}
+
+/** The position's evaluation from White's side: the best rated move's score (the engine
+ *  scores for the side to move, so Black to move is negated). Null when nothing is rated. */
+export function positionEval(position?: TreePosition): { cp: number | null; mate: number | null } | null {
+  const best = position?.moves
+    .filter((m) => m.loss_cp !== null && (m.score_cp !== null || m.mate !== null))
+    .reduce<TreeMove | null>((a, m) => (a === null || (m.loss_cp ?? 0) < (a.loss_cp ?? 0) ? m : a), null);
+  if (!position || !best) return null;
+  const sign = position.side_to_move === "white" ? 1 : -1;
+  return { cp: best.score_cp === null ? null : sign * best.score_cp, mate: best.mate === null ? null : sign * best.mate };
+}
+
+/** White's share of the evaluation bar, 0..1 (a smooth curve: ±4 pawns is near the ends). */
+export function evalShare(evaluation: { cp: number | null; mate: number | null } | null): number {
+  if (!evaluation) return 0.5;
+  if (evaluation.mate !== null) return evaluation.mate > 0 ? 1 : 0;
+  return 1 / (1 + Math.exp(-(evaluation.cp ?? 0) / 180));
 }

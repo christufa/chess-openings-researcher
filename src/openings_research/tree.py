@@ -1,4 +1,5 @@
-"""The opening book as a move tree, built from the latest published line of every opening.
+"""The opening book as a move tree: the latest published lines of every opening, plus the
+reference book of named variations (reference.py) beside them.
 
 Positions are keyed by the same identity the pipeline uses (`position_record`): placement,
 side to move, castling and legal en passant, without move counters. Different move orders
@@ -22,6 +23,8 @@ class BookMove:
     to_fen: str
     openings: set[str] = field(default_factory=set)
     lines: set[str] = field(default_factory=set)  # names of researched lines that play this move
+    reference: bool = False  # a named variation plays this move
+    variations: int = 0  # how many named variations go through this move (a popularity proxy)
 
 
 @dataclass
@@ -31,6 +34,7 @@ class BookPosition:
     moves: dict[str, BookMove] = field(default_factory=dict)
     named: set[str] = field(default_factory=set)  # names of lines that end exactly here
     openings: set[str] = field(default_factory=set)  # openings whose lines pass through here
+    reference: list[dict] = field(default_factory=list)  # named variations ending here: {"eco", "name"}
 
 
 def board_for(fen: str) -> chess.Board:
@@ -44,9 +48,23 @@ def board_for(fen: str) -> chess.Board:
 
 
 class BookTree:
-    def __init__(self, lines: list[dict]):
-        """`lines`: opening, line name, start FEN (normalized) and UCI moves of each published line."""
+    def __init__(self, lines: list[dict], reference=()):
+        """`lines`: opening, line name, start FEN (normalized) and UCI moves of each published line.
+        `reference`: named variations ({"eco", "name", "moves_uci"} from the standard start)."""
         self.positions: dict[str, BookPosition] = {}
+        for variation in reference:
+            board = chess.Board()
+            node = self._position(board)
+            for uci in variation["moves_uci"]:
+                move = chess.Move.from_uci(uci)
+                san = board.san(move)
+                board.push(move)
+                child = self._position(board)
+                edge = node.moves.setdefault(uci, BookMove(uci, san, child.position_id, child.fen))
+                edge.reference = True
+                edge.variations += 1
+                node = child
+            node.reference.append({"eco": variation["eco"], "name": variation["name"]})
         for line in lines:
             board = board_for(line["start_fen"])
             node = self._position(board)
@@ -79,20 +97,24 @@ class BookTree:
         node = self.positions.get(record["position_id"])
         moves = sorted(
             node.moves.values() if node else [],
-            key=lambda m: (-len(m.lines), -len(m.openings), m.san),  # most-researched first
+            key=lambda m: (-len(m.lines), -len(m.openings), -m.variations, m.san),  # most-researched first
         )
         return {
             "position_id": record["position_id"],
             "fen": record["normalized_fen"],
             "side_to_move": "white" if board.turn == chess.WHITE else "black",
-            "in_book": node is not None,
+            "in_book": bool(node and node.openings),  # researched lines pass through
+            "in_reference": bool(node and (node.reference or any(m.reference for m in node.moves.values()))),
             "names": sorted(node.named) if node else [],
+            "reference": list(node.reference) if node else [],
             "openings": sorted(node.openings) if node else [],
             "moves": [
                 {
                     "uci": m.uci,
                     "san": m.san,
-                    "book": True,
+                    "book": bool(m.lines),
+                    "reference": m.reference,
+                    "variations": m.variations,
                     "fen": m.to_fen,
                     "openings": sorted(m.openings),
                     "lines": sorted(m.lines),
@@ -115,7 +137,8 @@ def score_value(cp, mate) -> int | None:
 
 
 def rank_moves(position: dict, evaluations: list[dict]) -> dict:
-    """Book moves first (by evaluation, then research), then the engine's other moves by quality.
+    """Researched book moves first (by evaluation, then research), then named reference moves
+    (by evaluation), then the engine's other moves by quality.
 
     `evaluations`: move_evaluations rows for this position. When several depths exist, the
     deepest wins. Book moves keep their place even when the engine dislikes them; their
@@ -141,11 +164,13 @@ def rank_moves(position: dict, evaluations: list[dict]) -> dict:
         return {"score_cp": row["score_cp"], "mate": row["mate"], "loss_cp": min(loss, 9999), "engine_rank": row["rank"]}, quality
 
     book_ucis = {m["uci"] for m in position["moves"]}
-    book = []
+    book, reference = [], []
     for move in position["moves"]:
         evaluation, quality = graded(move["uci"])
-        book.append({**move, **evaluation, "quality": "book", "engine_quality": quality})
+        group, label = (book, "book") if move["book"] else (reference, "reference")
+        group.append({**move, **evaluation, "quality": label, "engine_quality": quality})
     book.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, -len(m["lines"])))
+    reference.sort(key=lambda m: (m["loss_cp"] is None, m["loss_cp"] or 0, -m["variations"], m["san"]))
 
     board = board_for(position["fen"])
     engine = []
@@ -159,7 +184,8 @@ def rank_moves(position: dict, evaluations: list[dict]) -> dict:
         after = board.copy(stack=False)
         after.push(move)
         engine.append({
-            "uci": uci, "san": row["move_san"], "book": False, "fen": position_record(after)["normalized_fen"],
+            "uci": uci, "san": row["move_san"], "book": False, "reference": False, "variations": 0,
+            "fen": position_record(after)["normalized_fen"],
             "openings": [], "lines": [], "continues": False, **evaluation, "quality": quality, "engine_quality": quality,
         })
     order = {"good": 0, "weaker": 1, "poor": 2}
@@ -170,5 +196,5 @@ def rank_moves(position: dict, evaluations: list[dict]) -> dict:
         "evaluated": bool(best_rows),
         "engine": {"name": engine_info["engine"], "version": engine_info["engine_version"], "depth": engine_info["depth"]}
         if engine_info else None,
-        "moves": book + engine,
+        "moves": book + reference + engine,
     }
